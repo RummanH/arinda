@@ -1155,7 +1155,7 @@ function StockUpdateModal({ product, onClose, onSave }) {
 function DsrPage({ dsrs, issues, settlements, today, onAdd, onEdit, onDelete }) {
   const [search, setSearch] = useState('');
   const filteredDsrs = dsrs.filter((dsr) => `${dsr.name} ${dsr.phone} ${dsr.area} ${dsr.status}`.toLowerCase().includes(search.toLowerCase()));
-  const busyDsrIds = new Set(
+  const inProgressDsrIds = new Set(
     issues
       .filter((issue) => issue.date === today)
       .filter((issue) => !settlements.some((settlement) => settlement.date === today && settlement.dsrId === issue.dsrId))
@@ -1202,7 +1202,7 @@ function DsrPage({ dsrs, issues, settlements, today, onAdd, onEdit, onDelete }) 
                   <td className="table-cell font-semibold text-slate-950">
                     <div className="flex items-center gap-2">
                       <span>{dsr.name}</span>
-                      {busyDsrIds.has(dsr.id) ? <Badge tone="amber">In Delivery</Badge> : null}
+                      {inProgressDsrIds.has(dsr.id) ? <Badge tone="amber">In Progress</Badge> : null}
                     </div>
                   </td>
                   <td className="table-cell">
@@ -1218,7 +1218,10 @@ function DsrPage({ dsrs, issues, settlements, today, onAdd, onEdit, onDelete }) 
                     </span>
                   </td>
                   <td className="table-cell">
-                    <Badge tone={statusTone(dsr.status)}>{dsr.status}</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge tone={statusTone(dsr.status)}>{dsr.status}</Badge>
+                      {inProgressDsrIds.has(dsr.id) ? <Badge tone="amber">Outside</Badge> : null}
+                    </div>
                   </td>
                   <td className="table-cell">
                     <div className="flex justify-end gap-2">

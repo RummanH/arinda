@@ -43,6 +43,17 @@
     font: inherit;
   }
 
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
   ::selection {
     background: rgba(37, 99, 235, 0.16);
     color: #0f172a;

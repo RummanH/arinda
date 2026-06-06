@@ -130,6 +130,25 @@ function normalizeIssue(input) {
 }
 
 function normalizeSettlement(input) {
+  const items = Array.isArray(input.items)
+    ? input.items.map((item) => {
+        const issuedPieces = cleanInteger(item.issuedPieces);
+        const returnedPieces = cleanInteger(item.returnedPieces);
+        const soldPieces = Math.max(issuedPieces - returnedPieces, 0);
+        const rate = cleanMoney(item.rate);
+        return {
+          productId: String(item.productId || '').trim(),
+          productName: String(item.productName || '').trim(),
+          piecesPerCase: cleanInteger(item.piecesPerCase),
+          issuedPieces,
+          returnedPieces,
+          soldPieces,
+          rate,
+          payable: soldPieces * rate,
+        };
+      })
+    : [];
+
   return {
     id: input.id || createId('settlement'),
     date: String(input.date || '').trim(),
@@ -138,19 +157,8 @@ function normalizeSettlement(input) {
     area: String(input.area || '').trim(),
     phone: String(input.phone || '').trim(),
     issueIds: Array.isArray(input.issueIds) ? input.issueIds.map((item) => String(item)) : [],
-    items: Array.isArray(input.items)
-      ? input.items.map((item) => ({
-          productId: String(item.productId || '').trim(),
-          productName: String(item.productName || '').trim(),
-          piecesPerCase: cleanInteger(item.piecesPerCase),
-          issuedPieces: cleanInteger(item.issuedPieces),
-          returnedPieces: cleanInteger(item.returnedPieces),
-          soldPieces: cleanInteger(item.soldPieces),
-          rate: cleanMoney(item.rate),
-          payable: cleanMoney(item.payable),
-        }))
-      : [],
-    totalPayable: cleanMoney(input.totalPayable),
+    items,
+    totalPayable: items.reduce((sum, item) => sum + item.payable, 0),
     status: 'Completed',
   };
 }
@@ -590,6 +598,13 @@ app.post('/api/issues', async (req, res, next) => {
           [previousIssue.issue_date, previousIssue.dsr_id],
         );
 
+        if (settlementCheck.rowCount > 0) {
+          assert(
+            issue.date === previousIssue.issue_date && issue.dsrId === previousIssue.dsr_id,
+            'When a settlement already exists, the morning issue date and DSR cannot be changed.',
+          );
+        }
+
         const targetSettlementCheck =
           issue.date === previousIssue.issue_date && issue.dsrId === previousIssue.dsr_id
             ? settlementCheck
@@ -620,6 +635,8 @@ app.post('/api/issues', async (req, res, next) => {
           const existingSettlement = targetSettlementCheck.rows[0];
           const nextSettlementItems = syncSettlementItemsWithIssue(issue.items, existingSettlement.items);
           const nextTotalPayable = nextSettlementItems.reduce((sum, item) => sum + Number(item.payable || 0), 0);
+
+          await applySettlementInventoryDelta(client, existingSettlement.items, nextSettlementItems);
 
           await client.query(
             `UPDATE settlements
