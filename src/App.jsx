@@ -583,7 +583,6 @@ function Sidebar({ activePage, onNavigate, mobileOpen, setMobileOpen }) {
               <Warehouse size={22} />
             </div>
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">Operations</p>
               <h2 className="mt-1 text-xl font-black tracking-normal">ARINDA Enterprise</h2>
             </div>
           </div>
@@ -592,12 +591,7 @@ function Sidebar({ activePage, onNavigate, mobileOpen, setMobileOpen }) {
           </button>
         </div>
 
-        <div className="relative mt-8 rounded-[28px] border border-white/10 bg-white/5 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Overview</p>
-          <p className="mt-2 text-sm font-medium leading-6 text-slate-300">Centralized control for stock, route issue, settlement, and daily reporting.</p>
-        </div>
-
-        <nav className="premium-scrollbar relative mt-5 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
+        <nav className="premium-scrollbar relative mt-8 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = activePage === item.id;
@@ -635,11 +629,9 @@ function Sidebar({ activePage, onNavigate, mobileOpen, setMobileOpen }) {
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)]" />
-              <p className="text-sm font-black">Operational</p>
             </div>
             <Badge tone="emerald">BDT</Badge>
           </div>
-          <p className="mt-3 text-xs font-medium leading-5 text-slate-400">Current records are available for inventory, route activity, settlement, and reporting.</p>
         </div>
       </div>
 

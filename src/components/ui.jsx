@@ -142,27 +142,51 @@ export function ToastViewport({ toasts, onDismiss }) {
   };
 
   const tones = {
-    success: 'border-emerald-200 bg-white text-emerald-900',
-    error: 'border-rose-200 bg-white text-rose-900',
-    warning: 'border-amber-200 bg-white text-amber-900',
-    info: 'border-sky-200 bg-white text-slate-900',
+    success: {
+      shell: 'border-emerald-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(236,253,245,0.98))] text-emerald-950',
+      icon: 'bg-emerald-600 text-white shadow-[0_10px_24px_rgba(5,150,105,0.28)]',
+      bar: 'bg-emerald-500',
+    },
+    error: {
+      shell: 'border-rose-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(255,241,242,0.98))] text-rose-950',
+      icon: 'bg-rose-600 text-white shadow-[0_10px_24px_rgba(225,29,72,0.26)]',
+      bar: 'bg-rose-500',
+    },
+    warning: {
+      shell: 'border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(255,251,235,0.98))] text-amber-950',
+      icon: 'bg-amber-500 text-white shadow-[0_10px_24px_rgba(245,158,11,0.24)]',
+      bar: 'bg-amber-400',
+    },
+    info: {
+      shell: 'border-sky-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(240,249,255,0.98))] text-slate-950',
+      icon: 'bg-sky-600 text-white shadow-[0_10px_24px_rgba(2,132,199,0.24)]',
+      bar: 'bg-sky-500',
+    },
   };
 
   return (
     <div className="pointer-events-none fixed right-4 top-4 z-[70] flex w-[min(420px,calc(100vw-2rem))] flex-col gap-3 no-print">
       {toasts.map((toast) => {
         const Icon = icons[toast.type] || Info;
+        const tone = tones[toast.type] || tones.info;
         return (
-          <div key={toast.id} className={cx('pointer-events-auto overflow-hidden rounded-[24px] border shadow-[0_18px_40px_rgba(15,23,42,0.12)] backdrop-blur', tones[toast.type] || tones.info)}>
-            <div className="flex items-start gap-3 px-4 py-3.5">
-              <div className="mt-0.5 rounded-2xl bg-slate-50 p-2">
-                <Icon size={18} />
+          <div key={toast.id} className={cx('pointer-events-auto overflow-hidden rounded-[28px] border shadow-[0_24px_50px_rgba(15,23,42,0.14)] backdrop-blur', tone.shell)}>
+            <div className={cx('h-1.5 w-full', tone.bar)} />
+            <div className="relative flex items-start gap-3 px-4 py-4">
+              <div className="pointer-events-none absolute right-0 top-0 h-24 w-24 rounded-full bg-white/50 blur-2xl" />
+              <div className={cx('relative mt-0.5 rounded-2xl p-2.5', tone.icon)}>
+                <Icon size={18} strokeWidth={2.4} />
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-black">{toast.title}</p>
+              <div className="relative min-w-0 flex-1">
+                <p className="text-sm font-black tracking-tight">{toast.title}</p>
                 {toast.message ? <p className="mt-1 text-sm font-medium leading-6 text-slate-600">{toast.message}</p> : null}
               </div>
-              <button type="button" className="icon-btn h-8 w-8" onClick={() => onDismiss(toast.id)} aria-label="Dismiss notification">
+              <button
+                type="button"
+                className="relative inline-flex h-8 w-8 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 shadow-sm transition hover:bg-white hover:text-slate-900"
+                onClick={() => onDismiss(toast.id)}
+                aria-label="Dismiss notification"
+              >
                 <X size={16} />
               </button>
             </div>
