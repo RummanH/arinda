@@ -28,7 +28,7 @@ import {
   X,
 } from 'lucide-react';
 import PrintableSheet from './components/PrintableSheet';
-import { Alert, Badge, ChartPanel, DonutChart, EmptyState, HorizontalBarChart, Modal, SectionHeader, StackedBarChart, StatCard, TrendChart, cx } from './components/ui';
+import { Alert, Badge, ChartPanel, DonutChart, EmptyState, HorizontalBarChart, Modal, SectionHeader, StackedBarChart, StatCard, ToastViewport, TrendChart, cx } from './components/ui';
 import {
   calculatePayable,
   calculateSold,
@@ -325,8 +325,21 @@ export default function App() {
   const [dsrModal, setDsrModal] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [toasts, setToasts] = useState([]);
 
   const pageTitle = NAV_ITEMS.find((item) => item.id === activePage)?.label || 'Dashboard';
+
+  function pushToast(type, title, message = '') {
+    const id = crypto.randomUUID();
+    setToasts((current) => [...current, { id, type, title, message }]);
+    setTimeout(() => {
+      setToasts((current) => current.filter((toast) => toast.id !== id));
+    }, 4000);
+  }
+
+  function dismissToast(id) {
+    setToasts((current) => current.filter((toast) => toast.id !== id));
+  }
 
   function applyState(nextState) {
     setProducts(nextState.products || []);
@@ -342,6 +355,7 @@ export default function App() {
       applyState(state);
     } catch (error) {
       setLoadError(error.message);
+      pushToast('error', 'Unable to load data', error.message);
     } finally {
       setLoading(false);
     }
@@ -358,8 +372,10 @@ export default function App() {
         : await apiRequest('/products', { method: 'POST', body: JSON.stringify(product) });
       applyState(state);
       setProductModal(null);
+      pushToast('success', product.id ? 'Product updated' : 'Product created', product.name);
       return { ok: true };
     } catch (error) {
+      pushToast('error', 'Product request failed', error.message);
       return { ok: false, message: error.message };
     }
   }
@@ -371,8 +387,9 @@ export default function App() {
     try {
       const state = await apiRequest(`/products/${product.id}`, { method: 'DELETE' });
       applyState(state);
+      pushToast('success', 'Product deleted', product.name);
     } catch (error) {
-      window.alert(error.message);
+      pushToast('error', 'Delete failed', error.message);
     }
   }
 
@@ -384,8 +401,10 @@ export default function App() {
       });
       applyState(state);
       setStockModalProduct(null);
+      pushToast('success', 'Stock updated', 'Inventory quantity was updated successfully.');
       return { ok: true };
     } catch (error) {
+      pushToast('error', 'Stock update failed', error.message);
       return { ok: false, message: error.message };
     }
   }
@@ -395,8 +414,10 @@ export default function App() {
       const state = dsr.id ? await apiRequest(`/dsrs/${dsr.id}`, { method: 'PUT', body: JSON.stringify(dsr) }) : await apiRequest('/dsrs', { method: 'POST', body: JSON.stringify(dsr) });
       applyState(state);
       setDsrModal(null);
+      pushToast('success', dsr.id ? 'DSR updated' : 'DSR created', dsr.name);
       return { ok: true };
     } catch (error) {
+      pushToast('error', 'DSR request failed', error.message);
       return { ok: false, message: error.message };
     }
   }
@@ -408,8 +429,9 @@ export default function App() {
     try {
       const state = await apiRequest(`/dsrs/${dsr.id}`, { method: 'DELETE' });
       applyState(state);
+      pushToast('success', 'DSR deleted', dsr.name);
     } catch (error) {
-      window.alert(error.message);
+      pushToast('error', 'Delete failed', error.message);
     }
   }
 
@@ -417,8 +439,10 @@ export default function App() {
     try {
       const state = await apiRequest('/issues', { method: 'POST', body: JSON.stringify(issue) });
       applyState(state);
+      pushToast('success', issue.id ? 'Morning issue updated' : 'Morning issue saved', `${issue.dsrName} • ${formatDate(issue.date)}`);
       return { ok: true };
     } catch (error) {
+      pushToast('error', 'Morning issue failed', error.message);
       return { ok: false, message: error.message };
     }
   }
@@ -427,8 +451,10 @@ export default function App() {
     try {
       const state = await apiRequest('/settlements', { method: 'POST', body: JSON.stringify(settlement) });
       applyState(state);
+      pushToast('success', settlement.id ? 'Settlement updated' : 'Settlement completed', `${settlement.dsrName} • ${formatCurrency(settlement.totalPayable)}`);
       return { ok: true };
     } catch (error) {
+      pushToast('error', 'Settlement failed', error.message);
       return { ok: false, message: error.message };
     }
   }
@@ -456,6 +482,7 @@ export default function App() {
 
   return (
     <div className="page-shell">
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       <Sidebar activePage={activePage} onNavigate={setActivePage} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
       <div className="lg:pl-72">
         <TopHeader title={pageTitle} today={today} onOpenMenu={() => setMobileOpen(true)} />
@@ -509,8 +536,8 @@ function Sidebar({ activePage, onNavigate, mobileOpen, setMobileOpen }) {
               <Warehouse size={22} />
             </div>
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">Dealer OS</p>
-              <h2 className="mt-1 text-xl font-black tracking-normal">ARINDA Flow</h2>
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">Operations</p>
+              <h2 className="mt-1 text-xl font-black tracking-normal">ARINDA Enterprise</h2>
             </div>
           </div>
           <button type="button" className="icon-btn border-slate-700 bg-slate-900 text-white hover:bg-slate-800 lg:hidden" title="Close menu" onClick={() => setMobileOpen(false)}>
@@ -519,8 +546,8 @@ function Sidebar({ activePage, onNavigate, mobileOpen, setMobileOpen }) {
         </div>
 
         <div className="relative mt-8 rounded-[28px] border border-white/10 bg-white/5 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Workspace</p>
-          <p className="mt-2 text-sm font-medium leading-6 text-slate-300">Friendlier daily control for stock, salesmen, returns, and collection.</p>
+          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Overview</p>
+          <p className="mt-2 text-sm font-medium leading-6 text-slate-300">Centralized control for stock, route issue, settlement, and daily reporting.</p>
         </div>
 
         <nav className="relative mt-5 space-y-1.5">
@@ -561,11 +588,11 @@ function Sidebar({ activePage, onNavigate, mobileOpen, setMobileOpen }) {
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)]" />
-              <p className="text-sm font-black">System healthy</p>
+              <p className="text-sm font-black">Operational</p>
             </div>
             <Badge tone="emerald">BDT</Badge>
           </div>
-          <p className="mt-3 text-xs font-medium leading-5 text-slate-400">PostgreSQL, Express, and the Vite dashboard are running as one workflow so the team sees fresh figures with less friction.</p>
+          <p className="mt-3 text-xs font-medium leading-5 text-slate-400">Current records are available for inventory, route activity, settlement, and reporting.</p>
         </div>
       </div>
 
@@ -585,7 +612,7 @@ function TopHeader({ title, today, onOpenMenu }) {
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">Arinda Enterprise</p>
             <h1 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">{title}</h1>
-            <p className="mt-1 hidden text-sm font-medium text-slate-500 md:block">Designed to make stock, DSR, and collection work clearer for everyone using it.</p>
+            <p className="mt-1 hidden text-sm font-medium text-slate-500 md:block">Inventory control, route issue, settlement, and reporting in one workspace.</p>
           </div>
         </div>
         <div className="hidden items-center gap-3 sm:flex">
@@ -693,7 +720,7 @@ function DashboardPage({ products, dsrs, issues, settlements, today }) {
 
   return (
     <div>
-      <SectionHeader eyebrow="Today" title="Dealership Command Center" description="A friendlier live view of route issue, return, stock risk, and collection performance for the current trading day." />
+      <SectionHeader eyebrow="Today" title="Operations Dashboard" description="Live visibility into route issue, return, stock risk, and collection performance for the current trading day." />
 
       <div className="mb-6 overflow-hidden rounded-[34px] border border-white/20 bg-[linear-gradient(140deg,#071827_0%,#12304b_40%,#0d5b5a_100%)] shadow-[0_30px_80px_rgba(8,15,28,0.22)]">
         <div className="grid gap-8 p-5 text-white lg:grid-cols-[1.15fr_0.85fr] lg:p-8">
@@ -703,8 +730,8 @@ function DashboardPage({ products, dsrs, issues, settlements, today }) {
                 <CheckCircle2 size={14} />
                 Live Trading Day
               </div>
-              <h2 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">A calmer, clearer dashboard for daily dealership work.</h2>
-              <p className="mt-3 max-w-2xl text-sm font-medium leading-7 text-cyan-50/90">See what moved this morning, what still needs settlement tonight, where money is tied up in stock, and which routes need attention first.</p>
+              <h2 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">Daily dealership activity in one professional control panel.</h2>
+              <p className="mt-3 max-w-2xl text-sm font-medium leading-7 text-cyan-50/90">Monitor route movement, collection progress, inventory exposure, and operational exceptions from a single view.</p>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
               {operationalPulse.map((item) => (
@@ -881,8 +908,8 @@ function ProductsPage({ products, onAdd, onEdit, onDelete, onStock }) {
         <div className="border-b border-slate-100 p-4">
           {outOfStockProducts.length || veryLowProducts.length ? (
             <div className="mb-4 grid gap-3 lg:grid-cols-2">
-              {outOfStockProducts.length ? <Alert type="error">{`${outOfStockProducts.length} product is out of stock. Refill those items first.`}</Alert> : null}
-              {veryLowProducts.length ? <Alert type="warning">{`${veryLowProducts.length} product is very low in stock and should be restocked soon.`}</Alert> : null}
+              {outOfStockProducts.length ? <Alert type="error">{`${outOfStockProducts.length} product currently has no available stock.`}</Alert> : null}
+              {veryLowProducts.length ? <Alert type="warning">{`${veryLowProducts.length} product is at a critically low stock level.`}</Alert> : null}
             </div>
           ) : null}
           <div className="relative max-w-md">
@@ -1383,10 +1410,9 @@ function MorningIssuePage({ products, dsrs, issues, settlements, today, onSaveIs
     const result = await onSaveIssue(issue);
     setSaving(false);
     if (!result.ok) {
-      setMessage({ type: 'error', text: result.message });
       return;
     }
-    setMessage({ type: 'success', text: existingIssue ? 'Morning issue updated successfully.' : 'Morning issue saved. Inventory stock has been reduced.' });
+    setMessage(null);
   }
 
   return (
@@ -1429,7 +1455,7 @@ function MorningIssuePage({ products, dsrs, issues, settlements, today, onSaveIs
         ) : null}
         {existingIssue ? (
           <div className="mt-4">
-            <Alert type="info">This DSR already has a morning issue for the selected date. You can edit and update it directly.</Alert>
+            <Alert type="info">An existing morning issue was found for the selected DSR and date. Review and update it as needed.</Alert>
           </div>
         ) : null}
       </div>
@@ -1639,10 +1665,9 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
     const result = await onCompleteSettlement(settlement);
     setSaving(false);
     if (!result.ok) {
-      setMessage({ type: 'error', text: result.message });
       return;
     }
-    setMessage({ type: 'success', text: completedSettlement ? `Settlement updated. Payable amount is ${formatCurrency(settlement.totalPayable)}.` : `Settlement completed. Payable amount is ${formatCurrency(settlement.totalPayable)}.` });
+    setMessage(null);
   }
 
   return (
@@ -1677,7 +1702,7 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
         ) : null}
         {completedSettlement ? (
           <div className="mt-4">
-            <Alert type="info">This DSR already has a settlement for the selected date. You can edit and update it here.</Alert>
+            <Alert type="info">An existing settlement was found for the selected DSR and date. Review and update it as needed.</Alert>
           </div>
         ) : null}
       </div>

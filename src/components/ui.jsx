@@ -1,4 +1,4 @@
-import { PackageOpen, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Info, PackageOpen, X } from 'lucide-react';
 
 export function cx(...classes) {
   return classes.filter(Boolean).join(' ');
@@ -131,6 +131,46 @@ export function Alert({ type = 'info', children }) {
   };
 
   return <div className={cx('rounded-lg border px-3 py-2 text-sm font-medium', tones[type] || tones.info)}>{children}</div>;
+}
+
+export function ToastViewport({ toasts, onDismiss }) {
+  const icons = {
+    success: CheckCircle2,
+    error: AlertTriangle,
+    warning: AlertTriangle,
+    info: Info,
+  };
+
+  const tones = {
+    success: 'border-emerald-200 bg-white text-emerald-900',
+    error: 'border-rose-200 bg-white text-rose-900',
+    warning: 'border-amber-200 bg-white text-amber-900',
+    info: 'border-sky-200 bg-white text-slate-900',
+  };
+
+  return (
+    <div className="pointer-events-none fixed right-4 top-4 z-[70] flex w-[min(420px,calc(100vw-2rem))] flex-col gap-3 no-print">
+      {toasts.map((toast) => {
+        const Icon = icons[toast.type] || Info;
+        return (
+          <div key={toast.id} className={cx('pointer-events-auto overflow-hidden rounded-[24px] border shadow-[0_18px_40px_rgba(15,23,42,0.12)] backdrop-blur', tones[toast.type] || tones.info)}>
+            <div className="flex items-start gap-3 px-4 py-3.5">
+              <div className="mt-0.5 rounded-2xl bg-slate-50 p-2">
+                <Icon size={18} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-black">{toast.title}</p>
+                {toast.message ? <p className="mt-1 text-sm font-medium leading-6 text-slate-600">{toast.message}</p> : null}
+              </div>
+              <button type="button" className="icon-btn h-8 w-8" onClick={() => onDismiss(toast.id)} aria-label="Dismiss notification">
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export function ChartPanel({ title, description, action, children, className = '' }) {
