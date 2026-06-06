@@ -367,7 +367,14 @@ async function downloadSheetPdf(targetId, fileName) {
 
 export default function App() {
   const today = todayISO();
-  const [activePage, setActivePage] = useState('dashboard');
+  const [activePage, setActivePage] = useState(() => {
+    if (typeof window === 'undefined') {
+      return 'dashboard';
+    }
+
+    const savedPage = window.localStorage.getItem('arinda-active-page');
+    return NAV_ITEMS.some((item) => item.id === savedPage) ? savedPage : 'dashboard';
+  });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [products, setProducts] = useState([]);
   const [dsrs, setDsrs] = useState([]);
@@ -417,6 +424,10 @@ export default function App() {
   useEffect(() => {
     refreshState();
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem('arinda-active-page', activePage);
+  }, [activePage]);
 
   useEffect(() => {
     function handleWheel(event) {
