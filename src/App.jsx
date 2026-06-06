@@ -160,6 +160,7 @@ function buildSheetData({ date, dsrId, dsrs, issues, settlements, products }) {
     status,
     items,
     totalPayable: settlement ? settlement.totalPayable : 0,
+    previousDue: settlement ? settlement.previousDue || 0 : 0,
     amountPaid: settlement ? settlement.amountPaid || 0 : 0,
     dueAmount: settlement ? settlement.dueAmount || 0 : 0,
   };
@@ -177,6 +178,7 @@ function buildDailyRows({ date, dsrs, issues, settlements, products }) {
     const returnedPieces = settlement ? settlement.items.reduce((sum, item) => sum + Number(item.returnedPieces || 0), 0) : 0;
     const soldPieces = settlement ? settlement.items.reduce((sum, item) => sum + Number(item.soldPieces || 0), 0) : 0;
     const totalPayable = settlement ? settlement.totalPayable : 0;
+    const previousDue = settlement ? Number(settlement.previousDue || 0) : 0;
     const amountPaid = settlement ? Number(settlement.amountPaid || 0) : 0;
     const dueAmount = settlement ? Number(settlement.dueAmount || 0) : 0;
     const status = settlement ? 'Completed' : aggregate.issueIds.length > 0 ? 'Pending' : 'No Issue';
@@ -188,6 +190,7 @@ function buildDailyRows({ date, dsrs, issues, settlements, products }) {
       returnedPieces,
       soldPieces,
       totalPayable,
+      previousDue,
       amountPaid,
       dueAmount,
       status,
@@ -308,6 +311,7 @@ function buildHistoryRows({ issues, settlements }) {
     area: settlement.area,
     pieces: settlement.items.reduce((sum, item) => sum + Number(item.soldPieces || 0), 0),
     amount: Number(settlement.totalPayable || 0),
+    previousDue: Number(settlement.previousDue || 0),
     amountPaid: Number(settlement.amountPaid || 0),
     dueAmount: Number(settlement.dueAmount || 0),
     status: 'Completed',
@@ -1639,6 +1643,7 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
   const [date, setDate] = useState(today);
   const [dsrId, setDsrId] = useState(activeDsrs[0]?.id || '');
   const [returns, setReturns] = useState({});
+  const [previousDueInput, setPreviousDueInput] = useState('');
   const [amountPaidInput, setAmountPaidInput] = useState('');
   const [message, setMessage] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -1656,6 +1661,7 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
   useEffect(() => {
     if (!completedSettlement) {
       setReturns({});
+      setPreviousDueInput('');
       setAmountPaidInput('');
       setMessage(null);
       return;
@@ -1671,6 +1677,7 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
         return map;
       }, {}),
     );
+    setPreviousDueInput(String(Number(completedSettlement.previousDue || 0)));
     setAmountPaidInput(String(Number(completedSettlement.amountPaid || 0)));
     setMessage(null);
   }, [date, dsrId, issueKey, completedSettlement?.id]);
@@ -1689,8 +1696,10 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
   });
   const displayRows = calculatedRows;
   const totalPayable = calculatedRows.reduce((sum, item) => sum + item.payable, 0);
-  const amountPaid = Math.min(Math.max(0, Number(amountPaidInput || 0)), totalPayable);
-  const dueAmount = Math.max(totalPayable - amountPaid, 0);
+  const previousDue = Math.max(0, Number(previousDueInput || 0));
+  const receivableTotal = totalPayable + previousDue;
+  const amountPaid = Math.min(Math.max(0, Number(amountPaidInput || 0)), receivableTotal);
+  const dueAmount = Math.max(receivableTotal - amountPaid, 0);
   const hasInvalidReturns = calculatedRows.some((row) => row.invalid);
   const sheet = buildSheetData({ date, dsrId, dsrs, issues, settlements, products });
 
@@ -1739,6 +1748,7 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
       issueIds: issueData.issueIds,
       items,
       totalPayable: items.reduce((sum, item) => sum + item.payable, 0),
+      previousDue,
       amountPaid,
       dueAmount,
       status: 'Completed',
@@ -1757,7 +1767,7 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
       <SectionHeader eyebrow="Collection close" title="Evening Settlement" description="Enter returns against the morning issue. Sold quantity and payable amount calculate automatically." />
 
       <div className="surface p-5">
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-3">
           <div>
             <label className="label">Date</label>
             <input className="input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
@@ -1775,11 +1785,6 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-xs font-bold uppercase text-slate-500">Total Payable</p>
             <p className="mt-1 text-2xl font-black text-slate-950">{formatCurrency(totalPayable)}</p>
-          </div>
-          <div>
-            <label className="label">Amount Paid</label>
-            <input className="input" type="number" min="0" step="0.01" value={amountPaidInput} onChange={(event) => setAmountPaidInput(event.target.value)} />
-            <p className="mt-2 text-sm font-semibold text-slate-600">Due: {formatCurrency(dueAmount)}</p>
           </div>
         </div>
         {message ? (
@@ -1860,7 +1865,19 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
               ) : (
                 <div className="text-sm font-semibold text-slate-600">Returned stock is added back to inventory after completion.</div>
               )}
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap items-end justify-end gap-2">
+                <div className="w-full sm:w-40">
+                  <label className="label">Previous Due</label>
+                  <input className="input h-11" type="number" min="0" step="0.01" value={previousDueInput} onChange={(event) => setPreviousDueInput(event.target.value)} disabled={saving} />
+                </div>
+                <div className="w-full sm:w-40">
+                  <label className="label">Amount Paid</label>
+                  <input className="input h-11" type="number" min="0" step="0.01" value={amountPaidInput} onChange={(event) => setAmountPaidInput(event.target.value)} disabled={saving} />
+                </div>
+                <div className="w-full sm:w-36 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">Due</p>
+                  <p className="mt-1 text-lg font-black text-slate-950">{formatCurrency(dueAmount)}</p>
+                </div>
                 {completedSettlement ? (
                   <button type="button" className="btn-secondary" onClick={() => window.print()}>
                     <Printer size={18} />

@@ -150,7 +150,9 @@ function normalizeSettlement(input) {
     : [];
 
   const totalPayable = items.reduce((sum, item) => sum + item.payable, 0);
-  const amountPaid = Math.min(Math.max(0, cleanMoney(input.amountPaid)), totalPayable);
+  const previousDue = Math.max(0, cleanMoney(input.previousDue));
+  const receivableTotal = totalPayable + previousDue;
+  const amountPaid = Math.min(Math.max(0, cleanMoney(input.amountPaid)), receivableTotal);
 
   return {
     id: input.id || createId('settlement'),
@@ -162,8 +164,9 @@ function normalizeSettlement(input) {
     issueIds: Array.isArray(input.issueIds) ? input.issueIds.map((item) => String(item)) : [],
     items,
     totalPayable,
+    previousDue,
     amountPaid,
-    dueAmount: totalPayable - amountPaid,
+    dueAmount: receivableTotal - amountPaid,
     status: 'Completed',
   };
 }
@@ -270,7 +273,7 @@ function syncSettlementItemsWithIssue(issueItems, settlementItems) {
 
 async function readState(client) {
   const [productsResult, dsrsResult, issuesResult, settlementsResult] = await Promise.all([
-    client.query('SELECT * FROM products ORDER BY created_at DESC'),
+    client.query('SELECT * FROM products ORDER BY created_at ASC'),
     client.query('SELECT * FROM dsrs ORDER BY created_at DESC'),
     client.query('SELECT * FROM issues ORDER BY created_at DESC'),
     client.query('SELECT * FROM settlements ORDER BY created_at DESC'),
@@ -312,6 +315,7 @@ async function readState(client) {
       issueIds: row.issue_ids,
       items: row.items,
       totalPayable: Number(row.total_payable),
+      previousDue: Number(row.previous_due || 0),
       amountPaid: Number(row.amount_paid || 0),
       dueAmount: Number(row.due_amount || 0),
       status: row.status,
@@ -377,12 +381,14 @@ async function createSchema() {
       issue_ids JSONB NOT NULL,
       items JSONB NOT NULL,
       total_payable NUMERIC NOT NULL,
+      previous_due NUMERIC NOT NULL DEFAULT 0,
       amount_paid NUMERIC NOT NULL DEFAULT 0,
       due_amount NUMERIC NOT NULL DEFAULT 0,
       status TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    ALTER TABLE settlements ADD COLUMN IF NOT EXISTS previous_due NUMERIC NOT NULL DEFAULT 0;
     ALTER TABLE settlements ADD COLUMN IF NOT EXISTS amount_paid NUMERIC NOT NULL DEFAULT 0;
     ALTER TABLE settlements ADD COLUMN IF NOT EXISTS due_amount NUMERIC NOT NULL DEFAULT 0;
   `);
@@ -789,7 +795,7 @@ app.post('/api/settlements', async (req, res, next) => {
 
         await client.query(
           `UPDATE settlements
-           SET settlement_date = $2, dsr_id = $3, dsr_name = $4, area = $5, phone = $6, issue_ids = $7::jsonb, items = $8::jsonb, total_payable = $9, amount_paid = $10, due_amount = $11, status = $12
+           SET settlement_date = $2, dsr_id = $3, dsr_name = $4, area = $5, phone = $6, issue_ids = $7::jsonb, items = $8::jsonb, total_payable = $9, previous_due = $10, amount_paid = $11, due_amount = $12, status = $13
            WHERE id = $1`,
           [
             settlement.id,
@@ -801,6 +807,7 @@ app.post('/api/settlements', async (req, res, next) => {
             JSON.stringify(settlement.issueIds),
             JSON.stringify(settlement.items),
             settlement.totalPayable,
+            settlement.previousDue,
             settlement.amountPaid,
             settlement.dueAmount,
             settlement.status,
@@ -829,8 +836,8 @@ app.post('/api/settlements', async (req, res, next) => {
       await applySettlementInventoryDelta(client, [], settlement.items);
 
       await client.query(
-        `INSERT INTO settlements (id, settlement_date, dsr_id, dsr_name, area, phone, issue_ids, items, total_payable, amount_paid, due_amount, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11, $12)`,
+        `INSERT INTO settlements (id, settlement_date, dsr_id, dsr_name, area, phone, issue_ids, items, total_payable, previous_due, amount_paid, due_amount, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11, $12, $13)`,
         [
           settlement.id,
           settlement.date,
@@ -841,6 +848,7 @@ app.post('/api/settlements', async (req, res, next) => {
           JSON.stringify(settlement.issueIds),
           JSON.stringify(settlement.items),
           settlement.totalPayable,
+          settlement.previousDue,
           settlement.amountPaid,
           settlement.dueAmount,
           settlement.status,
@@ -889,7 +897,7 @@ app.put('/api/settlements/:id', async (req, res, next) => {
 
       await client.query(
         `UPDATE settlements
-         SET settlement_date = $2, dsr_id = $3, dsr_name = $4, area = $5, phone = $6, issue_ids = $7::jsonb, items = $8::jsonb, total_payable = $9, amount_paid = $10, due_amount = $11, status = $12
+         SET settlement_date = $2, dsr_id = $3, dsr_name = $4, area = $5, phone = $6, issue_ids = $7::jsonb, items = $8::jsonb, total_payable = $9, previous_due = $10, amount_paid = $11, due_amount = $12, status = $13
          WHERE id = $1`,
         [
           settlement.id,
@@ -901,6 +909,7 @@ app.put('/api/settlements/:id', async (req, res, next) => {
           JSON.stringify(settlement.issueIds),
           JSON.stringify(settlement.items),
           settlement.totalPayable,
+          settlement.previousDue,
           settlement.amountPaid,
           settlement.dueAmount,
           settlement.status,

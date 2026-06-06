@@ -81,7 +81,11 @@ export default function PrintableSheet({ sheet, printTarget = false, targetId })
         </table>
       </div>
 
-      <div className="mt-6 grid gap-3 text-sm sm:grid-cols-3">
+      <div className="mt-6 grid gap-3 text-sm sm:grid-cols-4">
+        <div className="rounded-lg border border-slate-200 px-4 py-3">
+          <p className="text-xs font-bold uppercase text-slate-500">Previous Due</p>
+          <p className="mt-1 font-bold text-slate-950">{formatCurrency(sheet.previousDue || 0)}</p>
+        </div>
         <div className="rounded-lg border border-slate-200 px-4 py-3">
           <p className="text-xs font-bold uppercase text-slate-500">Payable</p>
           <p className="mt-1 font-bold text-slate-950">{formatCurrency(sheet.totalPayable)}</p>
