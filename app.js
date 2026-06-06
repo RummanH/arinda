@@ -439,6 +439,23 @@ app.put('/api/dsrs/:id', async (req, res, next) => {
         [dsr.id, dsr.name, dsr.phone, dsr.area, dsr.status],
       );
       assert(result.rowCount > 0, 'DSR not found.', 404);
+
+      // Keep historical issue and settlement sheets aligned with the latest DSR profile.
+      await Promise.all([
+        client.query(
+          `UPDATE issues
+           SET dsr_name = $2, phone = $3, area = $4
+           WHERE dsr_id = $1`,
+          [dsr.id, dsr.name, dsr.phone, dsr.area],
+        ),
+        client.query(
+          `UPDATE settlements
+           SET dsr_name = $2, phone = $3, area = $4
+           WHERE dsr_id = $1`,
+          [dsr.id, dsr.name, dsr.phone, dsr.area],
+        ),
+      ]);
+
       return readState(client);
     });
 

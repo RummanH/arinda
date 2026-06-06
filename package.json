@@ -8,6 +8,7 @@
     "dev": "vite",
     "dev:client": "vite",
     "build": "vite build",
+    "deploy": "node deploy.mjs",
     "preview": "vite preview",
     "start": "node app.js"
   },
