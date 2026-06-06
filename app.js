@@ -163,6 +163,98 @@ function assert(condition, message, status = 400) {
   }
 }
 
+function sumPiecesByProduct(items, field) {
+  return items.reduce((map, item) => {
+    const current = map.get(item.productId) || 0;
+    map.set(item.productId, current + cleanInteger(item[field]));
+    return map;
+  }, new Map());
+}
+
+async function lockProducts(client, productIds) {
+  const uniqueIds = [...new Set(productIds.filter(Boolean))];
+  const productMap = new Map();
+
+  for (const productId of uniqueIds) {
+    const result = await client.query('SELECT * FROM products WHERE id = $1 FOR UPDATE', [productId]);
+    assert(result.rowCount > 0, 'Product not found.', 404);
+    productMap.set(productId, result.rows[0]);
+  }
+
+  return productMap;
+}
+
+async function applyIssueInventoryDelta(client, previousItems, nextItems) {
+  const previousTotals = sumPiecesByProduct(previousItems, 'issuedPieces');
+  const nextTotals = sumPiecesByProduct(nextItems, 'issuedPieces');
+  const productIds = [...new Set([...previousTotals.keys(), ...nextTotals.keys()])];
+  const productMap = await lockProducts(client, productIds);
+
+  for (const productId of productIds) {
+    const previousIssued = previousTotals.get(productId) || 0;
+    const nextIssued = nextTotals.get(productId) || 0;
+    const difference = nextIssued - previousIssued;
+
+    if (difference === 0) {
+      continue;
+    }
+
+    const product = productMap.get(productId);
+    if (difference > 0) {
+      assert(Number(product.stock_pieces) >= difference, `${product.name} does not have enough available stock.`);
+    }
+
+    await client.query('UPDATE products SET stock_pieces = stock_pieces - $2 WHERE id = $1', [productId, difference]);
+  }
+}
+
+async function applySettlementInventoryDelta(client, previousItems, nextItems) {
+  const previousTotals = sumPiecesByProduct(previousItems, 'returnedPieces');
+  const nextTotals = sumPiecesByProduct(nextItems, 'returnedPieces');
+  const productIds = [...new Set([...previousTotals.keys(), ...nextTotals.keys()])];
+  const productMap = await lockProducts(client, productIds);
+
+  for (const productId of productIds) {
+    const previousReturned = previousTotals.get(productId) || 0;
+    const nextReturned = nextTotals.get(productId) || 0;
+    const difference = nextReturned - previousReturned;
+
+    if (difference === 0) {
+      continue;
+    }
+
+    const product = productMap.get(productId);
+    if (difference < 0) {
+      assert(Number(product.stock_pieces) >= Math.abs(difference), `${product.name} does not have enough available stock for this settlement change.`);
+    }
+
+    await client.query('UPDATE products SET stock_pieces = stock_pieces + $2 WHERE id = $1', [productId, difference]);
+  }
+}
+
+function syncSettlementItemsWithIssue(issueItems, settlementItems) {
+  const settlementMap = new Map((Array.isArray(settlementItems) ? settlementItems : []).map((item) => [item.productId, item]));
+
+  return issueItems.map((issueItem) => {
+    const previousSettlementItem = settlementMap.get(issueItem.productId);
+    const returnedPieces = cleanInteger(previousSettlementItem?.returnedPieces);
+    assert(returnedPieces <= issueItem.issuedPieces, `${issueItem.productName} returned quantity cannot be greater than issued quantity after the issue update.`);
+    const soldPieces = issueItem.issuedPieces - returnedPieces;
+    const rate = cleanMoney(issueItem.rate);
+
+    return {
+      productId: issueItem.productId,
+      productName: issueItem.productName,
+      piecesPerCase: issueItem.piecesPerCase,
+      issuedPieces: issueItem.issuedPieces,
+      returnedPieces,
+      soldPieces,
+      rate,
+      payable: soldPieces * rate,
+    };
+  });
+}
+
 async function readState(client) {
   const [productsResult, dsrsResult, issuesResult, settlementsResult] = await Promise.all([
     client.query('SELECT * FROM products ORDER BY created_at DESC'),
@@ -486,6 +578,70 @@ app.post('/api/issues', async (req, res, next) => {
     assert(issue.items.length > 0, 'Enter issue quantity for at least one product.');
 
     const state = await withTransaction(async (client) => {
+      if (req.body?.id) {
+        const existingIssue = await client.query('SELECT * FROM issues WHERE id = $1 LIMIT 1', [issue.id]);
+        assert(existingIssue.rowCount > 0, 'Issue not found.', 404);
+
+        const previousIssue = existingIssue.rows[0];
+        const previousItems = Array.isArray(previousIssue.items) ? previousIssue.items : [];
+
+        const settlementCheck = await client.query(
+          'SELECT * FROM settlements WHERE settlement_date = $1 AND dsr_id = $2 LIMIT 1',
+          [previousIssue.issue_date, previousIssue.dsr_id],
+        );
+
+        const targetSettlementCheck =
+          issue.date === previousIssue.issue_date && issue.dsrId === previousIssue.dsr_id
+            ? settlementCheck
+            : await client.query(
+                'SELECT * FROM settlements WHERE settlement_date = $1 AND dsr_id = $2 LIMIT 1',
+                [issue.date, issue.dsrId],
+              );
+
+        const duplicateIssue = await client.query(
+          'SELECT id FROM issues WHERE issue_date = $1 AND dsr_id = $2 AND id <> $3 LIMIT 1',
+          [issue.date, issue.dsrId, issue.id],
+        );
+        assert(duplicateIssue.rowCount === 0, 'Another morning issue already exists for this DSR and date.');
+
+        const dsrResult = await client.query('SELECT * FROM dsrs WHERE id = $1 LIMIT 1', [issue.dsrId]);
+        assert(dsrResult.rowCount > 0, 'Select a valid DSR.');
+
+        await applyIssueInventoryDelta(client, previousItems, issue.items);
+
+        await client.query(
+          `UPDATE issues
+           SET issue_date = $2, dsr_id = $3, dsr_name = $4, area = $5, phone = $6, items = $7::jsonb
+           WHERE id = $1`,
+          [issue.id, issue.date, issue.dsrId, issue.dsrName, issue.area, issue.phone, JSON.stringify(issue.items)],
+        );
+
+        if (targetSettlementCheck.rowCount > 0) {
+          const existingSettlement = targetSettlementCheck.rows[0];
+          const nextSettlementItems = syncSettlementItemsWithIssue(issue.items, existingSettlement.items);
+          const nextTotalPayable = nextSettlementItems.reduce((sum, item) => sum + Number(item.payable || 0), 0);
+
+          await client.query(
+            `UPDATE settlements
+             SET settlement_date = $2, dsr_id = $3, dsr_name = $4, area = $5, phone = $6, issue_ids = $7::jsonb, items = $8::jsonb, total_payable = $9
+             WHERE id = $1`,
+            [
+              existingSettlement.id,
+              issue.date,
+              issue.dsrId,
+              issue.dsrName,
+              issue.area,
+              issue.phone,
+              JSON.stringify([issue.id]),
+              JSON.stringify(nextSettlementItems),
+              nextTotalPayable,
+            ],
+          );
+        }
+
+        return readState(client);
+      }
+
       const settlementResult = await client.query(
         'SELECT id FROM settlements WHERE settlement_date = $1 AND dsr_id = $2 LIMIT 1',
         [issue.date, issue.dsrId],
@@ -495,15 +651,13 @@ app.post('/api/issues', async (req, res, next) => {
       const dsrResult = await client.query('SELECT * FROM dsrs WHERE id = $1 LIMIT 1', [issue.dsrId]);
       assert(dsrResult.rowCount > 0, 'Select a valid DSR.');
 
-      for (const item of issue.items) {
-        const productResult = await client.query('SELECT * FROM products WHERE id = $1 FOR UPDATE', [item.productId]);
-        assert(productResult.rowCount > 0, `${item.productName || 'Product'} not found.`);
+      const existingIssue = await client.query(
+        'SELECT id FROM issues WHERE issue_date = $1 AND dsr_id = $2 LIMIT 1',
+        [issue.date, issue.dsrId],
+      );
+      assert(existingIssue.rowCount === 0, 'Morning issue already exists for this DSR and date. Edit that issue instead.');
 
-        const product = productResult.rows[0];
-        assert(Number(product.stock_pieces) >= item.issuedPieces, `${item.productName} does not have enough available stock.`);
-
-        await client.query('UPDATE products SET stock_pieces = stock_pieces - $2 WHERE id = $1', [item.productId, item.issuedPieces]);
-      }
+      await applyIssueInventoryDelta(client, [], issue.items);
 
       await client.query(
         `INSERT INTO issues (id, issue_date, dsr_id, dsr_name, area, phone, items)
@@ -520,6 +674,58 @@ app.post('/api/issues', async (req, res, next) => {
   }
 });
 
+app.put('/api/issues/:id', async (req, res, next) => {
+  try {
+    const issue = normalizeIssue({ ...req.body, id: req.params.id });
+    assert(issue.date && issue.dsrId, 'Issue date and DSR are required.');
+    assert(issue.items.length > 0, 'Enter issue quantity for at least one product.');
+
+    const state = await withTransaction(async (client) => {
+      const existingIssue = await client.query('SELECT * FROM issues WHERE id = $1 LIMIT 1', [issue.id]);
+      assert(existingIssue.rowCount > 0, 'Issue not found.', 404);
+
+      const previousIssue = existingIssue.rows[0];
+      const previousItems = Array.isArray(previousIssue.items) ? previousIssue.items : [];
+
+      const settlementCheck = await client.query(
+        'SELECT id FROM settlements WHERE settlement_date = $1 AND dsr_id = $2 LIMIT 1',
+        [previousIssue.issue_date, previousIssue.dsr_id],
+      );
+      assert(settlementCheck.rowCount === 0, 'This issue already has a completed settlement and cannot be edited.');
+
+      const targetSettlementCheck = await client.query(
+        'SELECT id FROM settlements WHERE settlement_date = $1 AND dsr_id = $2 LIMIT 1',
+        [issue.date, issue.dsrId],
+      );
+      assert(targetSettlementCheck.rowCount === 0, 'Settlement is already completed for this DSR and date.');
+
+      const duplicateIssue = await client.query(
+        'SELECT id FROM issues WHERE issue_date = $1 AND dsr_id = $2 AND id <> $3 LIMIT 1',
+        [issue.date, issue.dsrId, issue.id],
+      );
+      assert(duplicateIssue.rowCount === 0, 'Another morning issue already exists for this DSR and date.');
+
+      const dsrResult = await client.query('SELECT * FROM dsrs WHERE id = $1 LIMIT 1', [issue.dsrId]);
+      assert(dsrResult.rowCount > 0, 'Select a valid DSR.');
+
+      await applyIssueInventoryDelta(client, previousItems, issue.items);
+
+      await client.query(
+        `UPDATE issues
+         SET issue_date = $2, dsr_id = $3, dsr_name = $4, area = $5, phone = $6, items = $7::jsonb
+         WHERE id = $1`,
+        [issue.id, issue.date, issue.dsrId, issue.dsrName, issue.area, issue.phone, JSON.stringify(issue.items)],
+      );
+
+      return readState(client);
+    });
+
+    res.json(state);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/settlements', async (req, res, next) => {
   try {
     const settlement = normalizeSettlement(req.body);
@@ -527,6 +733,52 @@ app.post('/api/settlements', async (req, res, next) => {
     assert(settlement.items.length > 0, 'No morning issue found for this DSR and date.');
 
     const state = await withTransaction(async (client) => {
+      if (req.body?.id) {
+        const existingSettlement = await client.query('SELECT * FROM settlements WHERE id = $1 LIMIT 1', [settlement.id]);
+        assert(existingSettlement.rowCount > 0, 'Settlement not found.', 404);
+
+        const previousSettlement = existingSettlement.rows[0];
+        const previousItems = Array.isArray(previousSettlement.items) ? previousSettlement.items : [];
+
+        const duplicateSettlement = await client.query(
+          'SELECT id FROM settlements WHERE settlement_date = $1 AND dsr_id = $2 AND id <> $3 LIMIT 1',
+          [settlement.date, settlement.dsrId, settlement.id],
+        );
+        assert(duplicateSettlement.rowCount === 0, 'Another settlement already exists for this DSR and date.');
+
+        const issueResult = await client.query(
+          'SELECT id FROM issues WHERE issue_date = $1 AND dsr_id = $2 LIMIT 1',
+          [settlement.date, settlement.dsrId],
+        );
+        assert(issueResult.rowCount > 0, 'No morning issue found for this DSR and date.');
+
+        for (const item of settlement.items) {
+          assert(item.returnedPieces <= item.issuedPieces, 'Returned quantity cannot be greater than issued quantity.');
+        }
+
+        await applySettlementInventoryDelta(client, previousItems, settlement.items);
+
+        await client.query(
+          `UPDATE settlements
+           SET settlement_date = $2, dsr_id = $3, dsr_name = $4, area = $5, phone = $6, issue_ids = $7::jsonb, items = $8::jsonb, total_payable = $9, status = $10
+           WHERE id = $1`,
+          [
+            settlement.id,
+            settlement.date,
+            settlement.dsrId,
+            settlement.dsrName,
+            settlement.area,
+            settlement.phone,
+            JSON.stringify(settlement.issueIds),
+            JSON.stringify(settlement.items),
+            settlement.totalPayable,
+            settlement.status,
+          ],
+        );
+
+        return readState(client);
+      }
+
       const existingSettlement = await client.query(
         'SELECT id FROM settlements WHERE settlement_date = $1 AND dsr_id = $2 LIMIT 1',
         [settlement.date, settlement.dsrId],
@@ -541,12 +793,9 @@ app.post('/api/settlements', async (req, res, next) => {
 
       for (const item of settlement.items) {
         assert(item.returnedPieces <= item.issuedPieces, 'Returned quantity cannot be greater than issued quantity.');
-        if (item.returnedPieces > 0) {
-          const productResult = await client.query('SELECT id FROM products WHERE id = $1 FOR UPDATE', [item.productId]);
-          assert(productResult.rowCount > 0, `${item.productName || 'Product'} not found.`);
-          await client.query('UPDATE products SET stock_pieces = stock_pieces + $2 WHERE id = $1', [item.productId, item.returnedPieces]);
-        }
       }
+
+      await applySettlementInventoryDelta(client, [], settlement.items);
 
       await client.query(
         `INSERT INTO settlements (id, settlement_date, dsr_id, dsr_name, area, phone, issue_ids, items, total_payable, status)
@@ -569,6 +818,64 @@ app.post('/api/settlements', async (req, res, next) => {
     });
 
     res.status(201).json(state);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put('/api/settlements/:id', async (req, res, next) => {
+  try {
+    const settlement = normalizeSettlement({ ...req.body, id: req.params.id });
+    assert(settlement.date && settlement.dsrId, 'Settlement date and DSR are required.');
+    assert(settlement.items.length > 0, 'No morning issue found for this DSR and date.');
+
+    const state = await withTransaction(async (client) => {
+      const existingSettlement = await client.query('SELECT * FROM settlements WHERE id = $1 LIMIT 1', [settlement.id]);
+      assert(existingSettlement.rowCount > 0, 'Settlement not found.', 404);
+
+      const previousSettlement = existingSettlement.rows[0];
+      const previousItems = Array.isArray(previousSettlement.items) ? previousSettlement.items : [];
+
+      const duplicateSettlement = await client.query(
+        'SELECT id FROM settlements WHERE settlement_date = $1 AND dsr_id = $2 AND id <> $3 LIMIT 1',
+        [settlement.date, settlement.dsrId, settlement.id],
+      );
+      assert(duplicateSettlement.rowCount === 0, 'Another settlement already exists for this DSR and date.');
+
+      const issueResult = await client.query(
+        'SELECT id FROM issues WHERE issue_date = $1 AND dsr_id = $2 LIMIT 1',
+        [settlement.date, settlement.dsrId],
+      );
+      assert(issueResult.rowCount > 0, 'No morning issue found for this DSR and date.');
+
+      for (const item of settlement.items) {
+        assert(item.returnedPieces <= item.issuedPieces, 'Returned quantity cannot be greater than issued quantity.');
+      }
+
+      await applySettlementInventoryDelta(client, previousItems, settlement.items);
+
+      await client.query(
+        `UPDATE settlements
+         SET settlement_date = $2, dsr_id = $3, dsr_name = $4, area = $5, phone = $6, issue_ids = $7::jsonb, items = $8::jsonb, total_payable = $9, status = $10
+         WHERE id = $1`,
+        [
+          settlement.id,
+          settlement.date,
+          settlement.dsrId,
+          settlement.dsrName,
+          settlement.area,
+          settlement.phone,
+          JSON.stringify(settlement.issueIds),
+          JSON.stringify(settlement.items),
+          settlement.totalPayable,
+          settlement.status,
+        ],
+      );
+
+      return readState(client);
+    });
+
+    res.json(state);
   } catch (error) {
     next(error);
   }

@@ -48,6 +48,7 @@ const NAV_ITEMS = [
   { id: 'morning', label: 'Morning Issue', icon: Truck },
   { id: 'settlement', label: 'Evening Settlement', icon: RotateCcw },
   { id: 'reports', label: 'Daily Reports', icon: FileText },
+  { id: 'history', label: 'History', icon: ClipboardList },
 ];
 
 async function apiRequest(path, options = {}) {
@@ -190,6 +191,7 @@ function buildDailyRows({ date, dsrs, issues, settlements, products }) {
 function statusTone(status) {
   if (status === 'Completed' || status === 'Active') return 'emerald';
   if (status === 'Pending') return 'amber';
+  if (status === 'Issued') return 'amber';
   if (status === 'Inactive') return 'rose';
   return 'slate';
 }
@@ -274,6 +276,40 @@ function buildTopPayableProducts(settlements) {
       meta: `${formatNumber(item.soldPieces)} pcs sold`,
       color: ['#0f766e', '#2563eb', '#f97316', '#7c3aed', '#e11d48'][index % 5],
     }));
+}
+
+function buildHistoryRows({ issues, settlements }) {
+  const issueRows = issues.map((issue) => ({
+    id: `issue-${issue.id}`,
+    recordId: issue.id,
+    type: 'Morning Issue',
+    date: issue.date,
+    dsrId: issue.dsrId,
+    dsrName: issue.dsrName,
+    area: issue.area,
+    pieces: issue.items.reduce((sum, item) => sum + Number(item.issuedPieces || 0), 0),
+    amount: issue.items.reduce((sum, item) => sum + Number(item.issuedPieces || 0) * Number(item.rate || 0), 0),
+    status: 'Issued',
+  }));
+  const settlementRows = settlements.map((settlement) => ({
+    id: `settlement-${settlement.id}`,
+    recordId: settlement.id,
+    type: 'Evening Settlement',
+    date: settlement.date,
+    dsrId: settlement.dsrId,
+    dsrName: settlement.dsrName,
+    area: settlement.area,
+    pieces: settlement.items.reduce((sum, item) => sum + Number(item.soldPieces || 0), 0),
+    amount: Number(settlement.totalPayable || 0),
+    status: 'Completed',
+  }));
+
+  return [...settlementRows, ...issueRows].sort((a, b) => {
+    if (a.date !== b.date) {
+      return b.date.localeCompare(a.date);
+    }
+    return a.type.localeCompare(b.type);
+  });
 }
 
 export default function App() {
@@ -440,11 +476,12 @@ export default function App() {
             />
           ) : null}
           {activePage === 'dsr' ? (
-            <DsrPage dsrs={dsrs} onAdd={() => setDsrModal({ mode: 'add' })} onEdit={(dsr) => setDsrModal({ mode: 'edit', dsr })} onDelete={handleDeleteDsr} />
+            <DsrPage dsrs={dsrs} issues={issues} settlements={settlements} today={today} onAdd={() => setDsrModal({ mode: 'add' })} onEdit={(dsr) => setDsrModal({ mode: 'edit', dsr })} onDelete={handleDeleteDsr} />
           ) : null}
           {activePage === 'morning' ? <MorningIssuePage {...pageProps} onSaveIssue={handleSaveIssue} /> : null}
           {activePage === 'settlement' ? <EveningSettlementPage {...pageProps} onCompleteSettlement={handleCompleteSettlement} /> : null}
           {activePage === 'reports' ? <DailyReportsPage {...pageProps} /> : null}
+          {activePage === 'history' ? <HistoryPage {...pageProps} /> : null}
         </main>
       </div>
 
@@ -823,6 +860,8 @@ function InsightLine({ label, value }) {
 function ProductsPage({ products, onAdd, onEdit, onDelete, onStock }) {
   const [search, setSearch] = useState('');
   const filteredProducts = products.filter((product) => `${product.name} ${product.category}`.toLowerCase().includes(search.toLowerCase()));
+  const veryLowProducts = products.filter((product) => product.stockPieces > 0 && product.stockPieces <= product.piecesPerCase);
+  const outOfStockProducts = products.filter((product) => product.stockPieces === 0);
 
   return (
     <div>
@@ -840,6 +879,12 @@ function ProductsPage({ products, onAdd, onEdit, onDelete, onStock }) {
 
       <div className="surface overflow-hidden">
         <div className="border-b border-slate-100 p-4">
+          {outOfStockProducts.length || veryLowProducts.length ? (
+            <div className="mb-4 grid gap-3 lg:grid-cols-2">
+              {outOfStockProducts.length ? <Alert type="error">{`${outOfStockProducts.length} product is out of stock. Refill those items first.`}</Alert> : null}
+              {veryLowProducts.length ? <Alert type="warning">{`${veryLowProducts.length} product is very low in stock and should be restocked soon.`}</Alert> : null}
+            </div>
+          ) : null}
           <div className="relative max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input className="input pl-10" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search product or category" />
@@ -849,6 +894,7 @@ function ProductsPage({ products, onAdd, onEdit, onDelete, onStock }) {
           <table className="w-full">
             <thead className="table-head">
               <tr>
+                <th className="px-4 py-3">#</th>
                 <th className="px-4 py-3">Product</th>
                 <th className="px-4 py-3">Case Size</th>
                 <th className="px-4 py-3">Purchase</th>
@@ -858,11 +904,18 @@ function ProductsPage({ products, onAdd, onEdit, onDelete, onStock }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredProducts.map((product) => (
+              {filteredProducts.map((product, index) => (
                 <tr key={product.id} className="hover:bg-slate-50">
+                  <td className="table-cell font-black text-slate-400">{index + 1}</td>
                   <td className="table-cell">
-                    <p className="font-semibold text-slate-950">{product.name}</p>
-                    <p className="text-xs text-slate-500">{product.category}</p>
+                    <div className="flex items-start gap-2">
+                      <div>
+                        <p className="font-semibold text-slate-950">{product.name}</p>
+                        <p className="text-xs text-slate-500">{product.category}</p>
+                      </div>
+                      {product.stockPieces === 0 ? <Badge tone="rose">Out</Badge> : null}
+                      {product.stockPieces > 0 && product.stockPieces <= product.piecesPerCase ? <Badge tone="amber">Low</Badge> : null}
+                    </div>
                   </td>
                   <td className="table-cell">{product.piecesPerCase} pcs/case</td>
                   <td className="table-cell">{formatCurrency(product.purchasePrice)}</td>
@@ -1070,9 +1123,15 @@ function StockUpdateModal({ product, onClose, onSave }) {
   );
 }
 
-function DsrPage({ dsrs, onAdd, onEdit, onDelete }) {
+function DsrPage({ dsrs, issues, settlements, today, onAdd, onEdit, onDelete }) {
   const [search, setSearch] = useState('');
   const filteredDsrs = dsrs.filter((dsr) => `${dsr.name} ${dsr.phone} ${dsr.area} ${dsr.status}`.toLowerCase().includes(search.toLowerCase()));
+  const busyDsrIds = new Set(
+    issues
+      .filter((issue) => issue.date === today)
+      .filter((issue) => !settlements.some((settlement) => settlement.date === today && settlement.dsrId === issue.dsrId))
+      .map((issue) => issue.dsrId),
+  );
 
   return (
     <div>
@@ -1099,6 +1158,7 @@ function DsrPage({ dsrs, onAdd, onEdit, onDelete }) {
           <table className="w-full">
             <thead className="table-head">
               <tr>
+                <th className="px-4 py-3">#</th>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Phone</th>
                 <th className="px-4 py-3">Area</th>
@@ -1107,9 +1167,15 @@ function DsrPage({ dsrs, onAdd, onEdit, onDelete }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredDsrs.map((dsr) => (
+              {filteredDsrs.map((dsr, index) => (
                 <tr key={dsr.id} className="hover:bg-slate-50">
-                  <td className="table-cell font-semibold text-slate-950">{dsr.name}</td>
+                  <td className="table-cell font-black text-slate-400">{index + 1}</td>
+                  <td className="table-cell font-semibold text-slate-950">
+                    <div className="flex items-center gap-2">
+                      <span>{dsr.name}</span>
+                      {busyDsrIds.has(dsr.id) ? <Badge tone="amber">In Delivery</Badge> : null}
+                    </div>
+                  </td>
                   <td className="table-cell">
                     <span className="inline-flex items-center gap-2">
                       <Phone size={15} className="text-slate-400" />
@@ -1221,7 +1287,7 @@ function DsrFormModal({ dsr, onClose, onSave }) {
   );
 }
 
-function MorningIssuePage({ products, dsrs, settlements, today, onSaveIssue }) {
+function MorningIssuePage({ products, dsrs, issues, settlements, today, onSaveIssue }) {
   const activeDsrs = dsrs.filter((dsr) => dsr.status === 'Active');
   const [date, setDate] = useState(today);
   const [dsrId, setDsrId] = useState(activeDsrs[0]?.id || '');
@@ -1236,16 +1302,36 @@ function MorningIssuePage({ products, dsrs, settlements, today, onSaveIssue }) {
   }, [activeDsrs, dsrId]);
 
   const selectedDsr = dsrs.find((dsr) => dsr.id === dsrId);
-  const issueBlocked = settlements.some((settlement) => settlement.date === date && settlement.dsrId === dsrId);
+  const existingIssue = issues.find((issue) => issue.date === date && issue.dsrId === dsrId);
+
+  useEffect(() => {
+    if (!existingIssue) {
+      setQuantities({});
+      return;
+    }
+
+    setQuantities(
+      existingIssue.items.reduce((map, item) => {
+        const piecesPerCase = Number(item.piecesPerCase || 1);
+        map[item.productId] = {
+          caseQty: Math.floor(Number(item.issuedPieces || 0) / piecesPerCase),
+          pieceQty: Number(item.issuedPieces || 0) % piecesPerCase,
+        };
+        return map;
+      }, {}),
+    );
+  }, [existingIssue?.id]);
 
   const issueRows = products.map((product) => {
     const quantity = quantities[product.id] || {};
     const issuedPieces = toPieces(quantity.caseQty, quantity.pieceQty, product.piecesPerCase);
+    const availableStock = product.stockPieces + Number(existingIssue?.items.find((item) => item.productId === product.id)?.issuedPieces || 0);
     return {
       ...product,
+      availableStock,
       issuedPieces,
       issueValue: issuedPieces * Number(product.sellingPrice || 0),
-      invalid: issuedPieces > product.stockPieces,
+      invalid: issuedPieces > availableStock,
     };
   });
   const selectedRows = issueRows.filter((row) => row.issuedPieces > 0);
@@ -1264,18 +1350,9 @@ function MorningIssuePage({ products, dsrs, settlements, today, onSaveIssue }) {
     setMessage(null);
   }
 
-  function clearSheet() {
-    setQuantities({});
-    setMessage(null);
-  }
-
   async function saveIssue() {
     if (!date || !selectedDsr) {
       setMessage({ type: 'error', text: 'Select date and DSR before saving.' });
-      return;
-    }
-    if (issueBlocked) {
-      setMessage({ type: 'error', text: 'This DSR already has a completed settlement for the selected date.' });
       return;
     }
     if (!selectedRows.length) {
@@ -1288,6 +1365,7 @@ function MorningIssuePage({ products, dsrs, settlements, today, onSaveIssue }) {
     }
 
     const issue = {
+      id: existingIssue?.id,
       date,
       dsrId: selectedDsr.id,
       dsrName: selectedDsr.name,
@@ -1308,8 +1386,7 @@ function MorningIssuePage({ products, dsrs, settlements, today, onSaveIssue }) {
       setMessage({ type: 'error', text: result.message });
       return;
     }
-    setQuantities({});
-    setMessage({ type: 'success', text: 'Morning issue saved. Inventory stock has been reduced.' });
+    setMessage({ type: 'success', text: existingIssue ? 'Morning issue updated successfully.' : 'Morning issue saved. Inventory stock has been reduced.' });
   }
 
   return (
@@ -1341,7 +1418,7 @@ function MorningIssuePage({ products, dsrs, settlements, today, onSaveIssue }) {
             <p className="mt-1 text-xl font-black text-slate-950">{formatNumber(totalIssuedPieces)} pcs</p>
           </div>
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
-            <p className="text-xs font-bold uppercase text-blue-700">Issue Value</p>
+            <p className="text-xs font-bold uppercase text-blue-700">{existingIssue ? 'Updated Value' : 'Issue Value'}</p>
             <p className="mt-1 text-xl font-black text-blue-900">{formatCurrency(totalIssueValue)}</p>
           </div>
         </div>
@@ -1350,9 +1427,9 @@ function MorningIssuePage({ products, dsrs, settlements, today, onSaveIssue }) {
             <Alert type={message.type}>{message.text}</Alert>
           </div>
         ) : null}
-        {issueBlocked ? (
+        {existingIssue ? (
           <div className="mt-4">
-            <Alert type="error">This DSR already has a completed settlement for the selected date. New morning issue is locked.</Alert>
+            <Alert type="info">This DSR already has a morning issue for the selected date. You can edit and update it directly.</Alert>
           </div>
         ) : null}
       </div>
@@ -1364,12 +1441,9 @@ function MorningIssuePage({ products, dsrs, settlements, today, onSaveIssue }) {
             <p className="mt-1 text-sm text-slate-500">Enter case and loose piece quantities beside each product.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn-secondary" onClick={clearSheet} disabled={saving || !selectedRows.length}>
-              Clear
-            </button>
-            <button type="button" className="btn-primary" onClick={saveIssue} disabled={saving || issueBlocked || !products.length || Boolean(invalidRows.length)}>
+            <button type="button" className="btn-primary" onClick={saveIssue} disabled={saving || !products.length || Boolean(invalidRows.length)}>
               <Save size={18} />
-              {saving ? 'Saving...' : 'Save Issue'}
+              {saving ? 'Saving...' : existingIssue ? 'Update Issue' : 'Save Issue'}
             </button>
           </div>
         </div>
@@ -1399,8 +1473,8 @@ function MorningIssuePage({ products, dsrs, settlements, today, onSaveIssue }) {
                           <p className="text-xs text-slate-500">{row.category} - {row.piecesPerCase} pcs/case</p>
                         </td>
                         <td className="table-cell">
-                          <p className="font-semibold text-slate-950">{formatCasePiece(row.stockPieces, row.piecesPerCase)}</p>
-                          <p className="text-xs text-slate-500">{formatNumber(row.stockPieces)} pcs</p>
+                          <p className="font-semibold text-slate-950">{formatCasePiece(row.availableStock, row.piecesPerCase)}</p>
+                          <p className="text-xs text-slate-500">{formatNumber(row.availableStock)} pcs</p>
                         </td>
                         <td className="table-cell">
                           <input
@@ -1409,7 +1483,7 @@ function MorningIssuePage({ products, dsrs, settlements, today, onSaveIssue }) {
                             min="0"
                             value={quantity.caseQty || ''}
                             onChange={(event) => updateQuantity(row.id, 'caseQty', event.target.value)}
-                            disabled={saving || issueBlocked}
+                            disabled={saving}
                           />
                         </td>
                         <td className="table-cell">
@@ -1419,7 +1493,7 @@ function MorningIssuePage({ products, dsrs, settlements, today, onSaveIssue }) {
                             min="0"
                             value={quantity.pieceQty || ''}
                             onChange={(event) => updateQuantity(row.id, 'pieceQty', event.target.value)}
-                            disabled={saving || issueBlocked}
+                            disabled={saving}
                           />
                         </td>
                         <td className="table-cell">
@@ -1478,7 +1552,22 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
   const issueKey = issueData.issueIds.join('|');
 
   useEffect(() => {
-    setReturns({});
+    if (!completedSettlement) {
+      setReturns({});
+      setMessage(null);
+      return;
+    }
+
+    setReturns(
+      completedSettlement.items.reduce((map, item) => {
+        const piecesPerCase = Number(item.piecesPerCase || 1);
+        map[`${item.productId}-${item.rate}`] = {
+          caseQty: Math.floor(Number(item.returnedPieces || 0) / piecesPerCase),
+          pieceQty: Number(item.returnedPieces || 0) % piecesPerCase,
+        };
+        return map;
+      }, {}),
+    );
     setMessage(null);
   }, [date, dsrId, issueKey, completedSettlement?.id]);
 
@@ -1494,8 +1583,8 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
       invalid: returnedPieces > row.issuedPieces,
     };
   });
-  const displayRows = completedSettlement ? completedSettlement.items.map((item) => ({ ...item, invalid: false })) : calculatedRows;
-  const totalPayable = completedSettlement ? completedSettlement.totalPayable : calculatedRows.reduce((sum, item) => sum + item.payable, 0);
+  const displayRows = calculatedRows;
+  const totalPayable = calculatedRows.reduce((sum, item) => sum + item.payable, 0);
   const hasInvalidReturns = calculatedRows.some((row) => row.invalid);
   const sheet = buildSheetData({ date, dsrId, dsrs, issues, settlements, products });
 
@@ -1519,10 +1608,6 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
       setMessage({ type: 'error', text: 'No morning issue found for this DSR and date.' });
       return;
     }
-    if (completedSettlement) {
-      setMessage({ type: 'error', text: 'Settlement is already completed.' });
-      return;
-    }
     if (hasInvalidReturns) {
       setMessage({ type: 'error', text: 'Returned quantity cannot be greater than issued quantity.' });
       return;
@@ -1539,6 +1624,7 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
       payable: row.payable,
     }));
     const settlement = {
+      id: completedSettlement?.id,
       date,
       dsrId: dsr.id,
       dsrName: dsr.name,
@@ -1556,7 +1642,7 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
       setMessage({ type: 'error', text: result.message });
       return;
     }
-    setMessage({ type: 'success', text: `Settlement completed. Payable amount is ${formatCurrency(settlement.totalPayable)}.` });
+    setMessage({ type: 'success', text: completedSettlement ? `Settlement updated. Payable amount is ${formatCurrency(settlement.totalPayable)}.` : `Settlement completed. Payable amount is ${formatCurrency(settlement.totalPayable)}.` });
   }
 
   return (
@@ -1589,15 +1675,20 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
             <Alert type={message.type}>{message.text}</Alert>
           </div>
         ) : null}
+        {completedSettlement ? (
+          <div className="mt-4">
+            <Alert type="info">This DSR already has a settlement for the selected date. You can edit and update it here.</Alert>
+          </div>
+        ) : null}
       </div>
 
       <div className="surface mt-6 overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-base font-bold text-slate-950">Settlement Items</h2>
-            <p className="mt-1 text-sm text-slate-500">{completedSettlement ? 'This settlement is completed and read-only.' : 'Enter returned case and loose pieces for every issued product.'}</p>
+            <p className="mt-1 text-sm text-slate-500">{completedSettlement ? 'Update returned case and loose pieces, then save the settlement again.' : 'Enter returned case and loose pieces for every issued product.'}</p>
           </div>
-          {completedSettlement ? <Badge tone="emerald">Completed</Badge> : null}
+          {completedSettlement ? <Badge tone="emerald">Editing Completed Settlement</Badge> : null}
         </div>
 
         {displayRows.length ? (
@@ -1621,32 +1712,24 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
                       <td className="table-cell font-semibold text-slate-950">{row.productName}</td>
                       <td className="table-cell">{formatCasePiece(row.issuedPieces, row.piecesPerCase)}</td>
                       <td className="table-cell">
-                        {completedSettlement ? (
-                          Math.floor(row.returnedPieces / row.piecesPerCase)
-                        ) : (
-                          <input
-                            className="input h-9 w-24"
-                            type="number"
-                            min="0"
-                            value={returns[row.key]?.caseQty || ''}
-                            onChange={(event) => updateReturn(row.key, 'caseQty', event.target.value)}
-                            disabled={saving}
-                          />
-                        )}
+                        <input
+                          className="input h-9 w-24"
+                          type="number"
+                          min="0"
+                          value={returns[row.key]?.caseQty || ''}
+                          onChange={(event) => updateReturn(row.key, 'caseQty', event.target.value)}
+                          disabled={saving}
+                        />
                       </td>
                       <td className="table-cell">
-                        {completedSettlement ? (
-                          row.returnedPieces % row.piecesPerCase
-                        ) : (
-                          <input
-                            className="input h-9 w-24"
-                            type="number"
-                            min="0"
-                            value={returns[row.key]?.pieceQty || ''}
-                            onChange={(event) => updateReturn(row.key, 'pieceQty', event.target.value)}
-                            disabled={saving}
-                          />
-                        )}
+                        <input
+                          className="input h-9 w-24"
+                          type="number"
+                          min="0"
+                          value={returns[row.key]?.pieceQty || ''}
+                          onChange={(event) => updateReturn(row.key, 'pieceQty', event.target.value)}
+                          disabled={saving}
+                        />
                       </td>
                       <td className="table-cell font-semibold">{formatCasePiece(row.soldPieces, row.piecesPerCase)}</td>
                       <td className="table-cell">{formatCurrency(row.rate)}</td>
@@ -1672,9 +1755,9 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
                     Print Sheet
                   </button>
                 ) : null}
-                <button type="button" className="btn-primary" onClick={completeSettlement} disabled={saving || Boolean(completedSettlement) || hasInvalidReturns}>
+                <button type="button" className="btn-primary" onClick={completeSettlement} disabled={saving || hasInvalidReturns}>
                   <CheckCircle2 size={18} />
-                  {saving ? 'Saving...' : 'Complete Settlement'}
+                  {saving ? 'Saving...' : completedSettlement ? 'Update Settlement' : 'Complete Settlement'}
                 </button>
               </div>
             </div>
@@ -1691,6 +1774,73 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
           <PrintableSheet sheet={sheet} printTarget />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function HistoryPage({ issues, settlements, today }) {
+  const [search, setSearch] = useState('');
+  const historyRows = useMemo(() => buildHistoryRows({ issues, settlements }), [issues, settlements]);
+  const filteredRows = historyRows.filter((row) => `${row.type} ${row.dsrName} ${row.area} ${row.date}`.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div>
+      <SectionHeader eyebrow="Archive" title="History" description="Browse past morning issues and evening settlements in one place." />
+
+      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+        <StatCard title="Morning Issues" value={formatNumber(issues.length)} helper="Total saved issue sheets" icon={Truck} tone="amber" />
+        <StatCard title="Settlements" value={formatNumber(settlements.length)} helper="Total completed or updated settlements" icon={RotateCcw} tone="emerald" />
+        <StatCard title="Latest Activity Date" value={historyRows[0] ? shortDate(historyRows[0].date) : shortDate(today)} helper="Most recent archived record" icon={CalendarDays} tone="blue" />
+      </div>
+
+      <div className="surface overflow-hidden">
+        <div className="border-b border-slate-100 p-4">
+          <div className="relative max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input className="input pl-10" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search date, DSR, area, or record type" />
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="table-head">
+              <tr>
+                <th className="px-4 py-3">#</th>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Type</th>
+                <th className="px-4 py-3">DSR</th>
+                <th className="px-4 py-3">Qty</th>
+                <th className="px-4 py-3">Amount</th>
+                <th className="px-4 py-3">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredRows.map((row, index) => (
+                <tr key={row.id} className="hover:bg-slate-50">
+                  <td className="table-cell font-black text-slate-400">{index + 1}</td>
+                  <td className="table-cell font-semibold text-slate-950">{formatDate(row.date)}</td>
+                  <td className="table-cell">
+                    <Badge tone={row.type === 'Morning Issue' ? 'amber' : 'emerald'}>{row.type}</Badge>
+                  </td>
+                  <td className="table-cell">
+                    <p className="font-semibold text-slate-950">{row.dsrName}</p>
+                    <p className="text-xs text-slate-500">{row.area}</p>
+                  </td>
+                  <td className="table-cell">{formatNumber(row.pieces)} pcs</td>
+                  <td className="table-cell font-bold">{formatCurrency(row.amount)}</td>
+                  <td className="table-cell">
+                    <Badge tone={statusTone(row.status)}>{row.status}</Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!filteredRows.length ? (
+          <div className="p-5">
+            <EmptyState title="No history matched" description="Try another search term or create issue and settlement records first." icon={FileText} />
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
