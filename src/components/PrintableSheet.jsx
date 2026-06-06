@@ -81,6 +81,21 @@ export default function PrintableSheet({ sheet, printTarget = false, targetId })
         </table>
       </div>
 
+      <div className="mt-6 grid gap-3 text-sm sm:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 px-4 py-3">
+          <p className="text-xs font-bold uppercase text-slate-500">Payable</p>
+          <p className="mt-1 font-bold text-slate-950">{formatCurrency(sheet.totalPayable)}</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 px-4 py-3">
+          <p className="text-xs font-bold uppercase text-slate-500">Amount Paid</p>
+          <p className="mt-1 font-bold text-slate-950">{formatCurrency(sheet.amountPaid || 0)}</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 px-4 py-3">
+          <p className="text-xs font-bold uppercase text-slate-500">Due</p>
+          <p className="mt-1 font-bold text-slate-950">{formatCurrency(sheet.dueAmount || 0)}</p>
+        </div>
+      </div>
+
       <div className="mt-12 grid grid-cols-2 gap-8 text-sm font-semibold text-slate-950">
         <div>
           <div className="border-t border-slate-900 pt-2">DSR Signature</div>
