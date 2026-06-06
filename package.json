@@ -4,11 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "install:all": "node deploy.mjs --install-only",
     "server": "node app.js",
     "dev": "vite",
     "dev:client": "vite",
     "build": "vite build",
     "deploy": "node deploy.mjs",
+    "deploy:watch": "node deploy.mjs --watch",
     "preview": "vite preview",
     "start": "node app.js"
   },
