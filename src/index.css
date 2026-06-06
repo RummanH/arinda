@@ -163,6 +163,19 @@
     margin: 12mm;
   }
 
+  html,
+  body,
+  #root,
+  .page-shell {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .page-shell::before {
+    display: none !important;
+  }
+
   body {
     background: white !important;
   }
@@ -177,8 +190,8 @@
   }
 
   .print-target {
-    position: absolute !important;
-    inset: 0 auto auto 0 !important;
+    position: static !important;
+    inset: auto !important;
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;

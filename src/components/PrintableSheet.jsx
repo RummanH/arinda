@@ -1,7 +1,7 @@
 import { formatCasePiece, formatCurrency, formatDate, formatNumber } from '../utils/calculations';
 import { cx } from './ui';
 
-export default function PrintableSheet({ sheet, printTarget = false }) {
+export default function PrintableSheet({ sheet, printTarget = false, targetId }) {
   if (!sheet) return null;
 
   const rows = sheet.items || [];
@@ -10,7 +10,7 @@ export default function PrintableSheet({ sheet, printTarget = false }) {
   const totalSold = rows.reduce((sum, item) => sum + Number(item.soldPieces || 0), 0);
 
   return (
-    <div className={cx('mx-auto w-full max-w-[210mm] rounded-xl border border-slate-200 bg-white p-6 shadow-soft', printTarget && 'print-target')}>
+    <div id={targetId} className={cx('mx-auto w-full max-w-[210mm] rounded-xl border border-slate-200 bg-white p-6 shadow-soft', printTarget && 'print-target')}>
       <div className="border-b-2 border-slate-950 pb-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>

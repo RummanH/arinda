@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   CircleDollarSign,
   ClipboardList,
+  Download,
   Eye,
   FileText,
   MapPin,
@@ -310,6 +311,50 @@ function buildHistoryRows({ issues, settlements }) {
     }
     return a.type.localeCompare(b.type);
   });
+}
+
+function buildPdfFileName(sheet) {
+  const safeName = String(sheet?.dsrName || 'dsr-sheet')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  return `${safeName || 'dsr-sheet'}-${sheet?.date || 'report'}.pdf`;
+}
+
+async function downloadSheetPdf(targetId, fileName) {
+  const element = document.getElementById(targetId);
+  if (!element) {
+    throw new Error('Printable sheet not found.');
+  }
+
+  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
+  const canvas = await html2canvas(element, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: '#ffffff',
+  });
+
+  const imageData = canvas.toDataURL('image/png');
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const imageWidth = pageWidth;
+  const imageHeight = (canvas.height * imageWidth) / canvas.width;
+
+  let heightLeft = imageHeight;
+  let position = 0;
+
+  pdf.addImage(imageData, 'PNG', 0, position, imageWidth, imageHeight, undefined, 'FAST');
+  heightLeft -= pageHeight;
+
+  while (heightLeft > 0) {
+    position = heightLeft - imageHeight;
+    pdf.addPage();
+    pdf.addImage(imageData, 'PNG', 0, position, imageWidth, imageHeight, undefined, 'FAST');
+    heightLeft -= pageHeight;
+  }
+
+  pdf.save(fileName);
 }
 
 export default function App() {
@@ -1801,7 +1846,17 @@ function EveningSettlementPage({ products, dsrs, issues, settlements, today, onC
 
       {completedSettlement ? (
         <div className="mt-6">
-          <PrintableSheet sheet={sheet} printTarget />
+          <div className="mb-3 flex items-center justify-end gap-2 no-print">
+            <button type="button" className="btn-secondary" onClick={() => downloadSheetPdf('settlement-print-sheet', buildPdfFileName(sheet))}>
+              <Download size={18} />
+              Download PDF
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => window.print()}>
+              <Printer size={18} />
+              Print Sheet
+            </button>
+          </div>
+          <PrintableSheet sheet={sheet} printTarget targetId="settlement-print-sheet" />
         </div>
       ) : null}
     </div>
@@ -2005,12 +2060,18 @@ function DailyReportsPage({ products, dsrs, issues, settlements, today }) {
               <h2 className="text-lg font-bold text-slate-950">Printable DSR Sheet</h2>
               <p className="text-sm text-slate-500">{selectedSheet.dsrName} - {formatDate(selectedSheet.date)}</p>
             </div>
-            <button type="button" className="btn-primary" onClick={() => window.print()}>
-              <Printer size={18} />
-              Print Sheet
-            </button>
+            <div className="flex items-center gap-2">
+              <button type="button" className="btn-secondary" onClick={() => downloadSheetPdf('report-print-sheet', buildPdfFileName(selectedSheet))}>
+                <Download size={18} />
+                Download PDF
+              </button>
+              <button type="button" className="btn-primary" onClick={() => window.print()}>
+                <Printer size={18} />
+                Print Sheet
+              </button>
+            </div>
           </div>
-          <PrintableSheet sheet={selectedSheet} printTarget />
+          <PrintableSheet sheet={selectedSheet} printTarget targetId="report-print-sheet" />
         </div>
       ) : null}
     </div>
