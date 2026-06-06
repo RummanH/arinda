@@ -28,7 +28,7 @@ import {
   X,
 } from 'lucide-react';
 import PrintableSheet from './components/PrintableSheet';
-import { Alert, Badge, EmptyState, Modal, SectionHeader, StatCard, cx } from './components/ui';
+import { Alert, Badge, ChartPanel, DonutChart, EmptyState, HorizontalBarChart, Modal, SectionHeader, StackedBarChart, StatCard, TrendChart, cx } from './components/ui';
 import {
   calculatePayable,
   calculateSold,
@@ -192,6 +192,88 @@ function statusTone(status) {
   if (status === 'Pending') return 'amber';
   if (status === 'Inactive') return 'rose';
   return 'slate';
+}
+
+function shortDate(date) {
+  if (!date) return '-';
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${date}T00:00:00`));
+}
+
+function buildTradingTrend({ issues, settlements, today, limit = 7 }) {
+  const dateSet = new Set([today]);
+  issues.forEach((issue) => dateSet.add(issue.date));
+  settlements.forEach((settlement) => dateSet.add(settlement.date));
+
+  return Array.from(dateSet)
+    .sort((a, b) => a.localeCompare(b))
+    .slice(-limit)
+    .map((date) => {
+      const issueRows = issues.filter((issue) => issue.date === date);
+      const settlementRows = settlements.filter((settlement) => settlement.date === date);
+      return {
+        date,
+        label: shortDate(date),
+        issued: issueRows.reduce((sum, issue) => sum + issue.items.reduce((itemSum, item) => itemSum + Number(item.issuedPieces || 0), 0), 0),
+        sold: settlementRows.reduce((sum, settlement) => sum + settlement.items.reduce((itemSum, item) => itemSum + Number(item.soldPieces || 0), 0), 0),
+        payable: settlementRows.reduce((sum, settlement) => sum + Number(settlement.totalPayable || 0), 0),
+      };
+    });
+}
+
+function buildCategoryInventory(products) {
+  return Array.from(
+    products.reduce((map, product) => {
+      const key = product.category || 'Uncategorized';
+      const current = map.get(key) || { label: key, value: 0, units: 0, color: 'linear-gradient(90deg,#0f766e,#2563eb)' };
+      current.value += Number(product.stockPieces || 0) * Number(product.purchasePrice || 0);
+      current.units += Number(product.stockPieces || 0);
+      map.set(key, current);
+      return map;
+    }, new Map()).values(),
+  )
+    .sort((a, b) => b.value - a.value)
+    .map((item, index) => ({
+      ...item,
+      color: ['#2563eb', '#0f766e', '#f97316', '#7c3aed', '#dc2626', '#0891b2'][index % 6],
+      meta: `${formatNumber(item.units)} pcs in stock`,
+    }));
+}
+
+function buildRoutePerformance(rows) {
+  return rows
+    .filter((row) => row.status !== 'No Issue')
+    .sort((a, b) => b.totalPayable - a.totalPayable || b.soldPieces - a.soldPieces)
+    .slice(0, 6)
+    .map((row) => ({
+      label: row.dsrName,
+      meta: row.area,
+      issued: row.issuedPieces,
+      returned: row.returnedPieces,
+      sold: row.soldPieces,
+      totalPayable: row.totalPayable,
+    }));
+}
+
+function buildTopPayableProducts(settlements) {
+  return Array.from(
+    settlements
+      .flatMap((settlement) => settlement.items)
+      .reduce((map, item) => {
+        const current = map.get(item.productId) || { label: item.productName, value: 0, soldPieces: 0 };
+        current.value += Number(item.payable || 0);
+        current.soldPieces += Number(item.soldPieces || 0);
+        map.set(item.productId, current);
+        return map;
+      }, new Map())
+      .values(),
+  )
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5)
+    .map((item, index) => ({
+      ...item,
+      meta: `${formatNumber(item.soldPieces)} pcs sold`,
+      color: ['#0f766e', '#2563eb', '#f97316', '#7c3aed', '#e11d48'][index % 5],
+    }));
 }
 
 export default function App() {
@@ -378,19 +460,20 @@ function Sidebar({ activePage, onNavigate, mobileOpen, setMobileOpen }) {
     <>
       <div
         className={cx(
-          'fixed inset-y-0 left-0 z-40 flex w-72 flex-col overflow-hidden border-r border-white/10 bg-[#07111f] px-4 py-5 text-white shadow-[18px_0_60px_rgba(15,23,42,0.22)] transition-transform duration-300 lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 flex w-72 flex-col overflow-hidden border-r border-white/10 bg-[linear-gradient(180deg,#081321_0%,#0d1f31_52%,#10273a_100%)] px-4 py-5 text-white shadow-[18px_0_60px_rgba(15,23,42,0.22)] transition-transform duration-300 lg:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-blue-600/20 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-cyan-400/20 to-transparent" />
+        <div className="pointer-events-none absolute -right-10 top-20 h-40 w-40 rounded-full bg-emerald-400/10 blur-3xl" />
         <div className="relative flex items-center justify-between px-2">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-white text-blue-700 shadow-[0_14px_30px_rgba(37,99,235,0.28)]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#fef3c7,#ffffff)] text-cyan-800 shadow-[0_16px_32px_rgba(14,165,233,0.24)]">
               <Warehouse size={22} />
             </div>
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-blue-200">Inventory</p>
-              <h2 className="mt-1 text-xl font-black tracking-normal">ARINDA</h2>
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">Dealer OS</p>
+              <h2 className="mt-1 text-xl font-black tracking-normal">ARINDA Flow</h2>
             </div>
           </div>
           <button type="button" className="icon-btn border-slate-700 bg-slate-900 text-white hover:bg-slate-800 lg:hidden" title="Close menu" onClick={() => setMobileOpen(false)}>
@@ -398,7 +481,12 @@ function Sidebar({ activePage, onNavigate, mobileOpen, setMobileOpen }) {
           </button>
         </div>
 
-        <nav className="relative mt-8 space-y-1">
+        <div className="relative mt-8 rounded-[28px] border border-white/10 bg-white/5 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Workspace</p>
+          <p className="mt-2 text-sm font-medium leading-6 text-slate-300">Friendlier daily control for stock, salesmen, returns, and collection.</p>
+        </div>
+
+        <nav className="relative mt-5 space-y-1.5">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = activePage === item.id;
@@ -411,25 +499,36 @@ function Sidebar({ activePage, onNavigate, mobileOpen, setMobileOpen }) {
                   setMobileOpen(false);
                 }}
                 className={cx(
-                  'group flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-bold transition',
-                  active ? 'bg-white text-slate-950 shadow-[0_16px_35px_rgba(15,23,42,0.24)]' : 'text-slate-300 hover:bg-white/10 hover:text-white',
+                  'group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold transition',
+                  active
+                    ? 'bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(236,254,255,0.96))] text-slate-950 shadow-[0_16px_35px_rgba(15,23,42,0.24)]'
+                    : 'text-slate-300 hover:bg-white/10 hover:text-white',
                 )}
               >
-                <span className={cx('flex h-8 w-8 items-center justify-center rounded-lg transition', active ? 'bg-blue-50 text-blue-700' : 'bg-white/10 text-slate-300 group-hover:bg-white/20 group-hover:text-white')}>
+                <span
+                  className={cx(
+                    'flex h-9 w-9 items-center justify-center rounded-2xl transition',
+                    active ? 'bg-cyan-50 text-cyan-700' : 'bg-white/10 text-slate-300 group-hover:bg-white/20 group-hover:text-white',
+                  )}
+                >
                   <Icon size={18} />
                 </span>
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {active ? <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_6px_rgba(16,185,129,0.14)]" /> : null}
               </button>
             );
           })}
         </nav>
 
-        <div className="relative mt-auto rounded-lg border border-white/10 bg-white/[0.06] p-4 shadow-inner">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)]" />
-            <p className="text-sm font-black">BDT ready</p>
+        <div className="relative mt-auto rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.04))] p-4 shadow-inner">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)]" />
+              <p className="text-sm font-black">System healthy</p>
+            </div>
+            <Badge tone="emerald">BDT</Badge>
           </div>
-          <p className="mt-2 text-xs font-medium leading-5 text-slate-400">Connected to PostgreSQL through the local Express API.</p>
+          <p className="mt-3 text-xs font-medium leading-5 text-slate-400">PostgreSQL, Express, and the Vite dashboard are running as one workflow so the team sees fresh figures with less friction.</p>
         </div>
       </div>
 
@@ -440,24 +539,25 @@ function Sidebar({ activePage, onNavigate, mobileOpen, setMobileOpen }) {
 
 function TopHeader({ title, today, onOpenMenu }) {
   return (
-    <header className="sticky top-0 z-20 border-b border-white/70 bg-white/80 shadow-[0_1px_0_rgba(15,23,42,0.03)] backdrop-blur-xl no-print">
-      <div className="mx-auto flex h-16 max-w-[1600px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-20 border-b border-white/60 bg-white/70 shadow-[0_1px_0_rgba(15,23,42,0.03)] backdrop-blur-2xl no-print">
+      <div className="mx-auto flex min-h-20 max-w-[1600px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           <button type="button" className="icon-btn lg:hidden" title="Open menu" onClick={onOpenMenu}>
             <Menu size={20} />
           </button>
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">ARINDA ENTERPRISE</p>
-            <h1 className="text-lg font-black text-slate-950">{title}</h1>
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">Arinda Enterprise</p>
+            <h1 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">{title}</h1>
+            <p className="mt-1 hidden text-sm font-medium text-slate-500 md:block">Designed to make stock, DSR, and collection work clearer for everyone using it.</p>
           </div>
         </div>
         <div className="hidden items-center gap-3 sm:flex">
-          <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3.5 py-2 text-sm font-bold text-emerald-700">
             <CheckCircle2 size={17} />
             Live Data
           </div>
-          <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm">
-            <CalendarDays size={17} className="text-blue-600" />
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3.5 py-2 text-sm font-bold text-slate-700 shadow-sm">
+            <CalendarDays size={17} className="text-cyan-600" />
             {formatDate(today)}
           </div>
         </div>
@@ -539,73 +639,99 @@ function DashboardPage({ products, dsrs, issues, settlements, today }) {
       icon: CircleDollarSign,
     },
   ];
+  const tradingTrend = buildTradingTrend({ issues, settlements, today });
+  const inventoryByCategory = buildCategoryInventory(products);
+  const routePerformance = buildRoutePerformance(dailyRows);
+  const topPayableProducts = buildTopPayableProducts(todaySettlements);
+  const settlementMix = [
+    { label: 'Completed', value: completedRows.length, color: '#0f766e' },
+    { label: 'Pending', value: pendingRows.length, color: '#f59e0b' },
+    { label: 'No issue', value: Math.max(activeDsrs - issuedDsrIds.size, 0), color: '#cbd5e1' },
+  ];
+  const operationalPulse = [
+    { title: 'Collection flow', value: `${formatNumber(completionRate)}%`, subtitle: 'Of issued DSRs already settled' },
+    { title: 'Average ticket', value: formatCurrency(averagePayable), subtitle: 'Average payable per completed DSR' },
+    { title: 'Attention stock', value: formatNumber(lowStockAll.length), subtitle: 'SKUs below four cases' },
+  ];
 
   return (
     <div>
-      <SectionHeader eyebrow="Today" title="Dealership Dashboard" description="Morning issue, evening return, sold quantity, and payable totals for the current trading day." />
+      <SectionHeader eyebrow="Today" title="Dealership Command Center" description="A friendlier live view of route issue, return, stock risk, and collection performance for the current trading day." />
 
-      <div className="mb-6 overflow-hidden rounded-lg border border-white/10 bg-[linear-gradient(135deg,#07111f_0%,#12335b_54%,#0f513b_100%)] shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
-        <div className="grid gap-6 p-5 text-white lg:grid-cols-[1fr_auto] lg:p-6">
-          <div className="flex flex-col justify-between gap-5">
+      <div className="mb-6 overflow-hidden rounded-[34px] border border-white/20 bg-[linear-gradient(140deg,#071827_0%,#12304b_40%,#0d5b5a_100%)] shadow-[0_30px_80px_rgba(8,15,28,0.22)]">
+        <div className="grid gap-8 p-5 text-white lg:grid-cols-[1.15fr_0.85fr] lg:p-8">
+          <div className="flex flex-col justify-between gap-7">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-blue-100">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-cyan-100">
                 <CheckCircle2 size={14} />
                 Live Trading Day
               </div>
-              <h2 className="mt-4 text-2xl font-black tracking-normal sm:text-3xl">ARINDA ENTERPRISE Control Room</h2>
-              <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-blue-100">Fast stock decisions, DSR issue control, and evening payable visibility in one clean dealership dashboard.</p>
+              <h2 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">A calmer, clearer dashboard for daily dealership work.</h2>
+              <p className="mt-3 max-w-2xl text-sm font-medium leading-7 text-cyan-50/90">See what moved this morning, what still needs settlement tonight, where money is tied up in stock, and which routes need attention first.</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {operationalPulse.map((item) => (
+                <div key={item.title} className="rounded-[26px] border border-white/12 bg-white/10 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-100/85">{item.title}</p>
+                  <p className="mt-2 text-3xl font-black tracking-tight text-white">{item.value}</p>
+                  <p className="mt-2 text-sm font-medium leading-6 text-cyan-50/80">{item.subtitle}</p>
+                </div>
+              ))}
             </div>
             <div className="flex flex-wrap gap-3 text-sm font-bold">
-              <span className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-2">
                 <CalendarDays size={16} />
                 {formatDate(today)}
               </span>
-              <span className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-2">
                 <UserCheck size={16} />
                 {formatNumber(activeDsrs)} active DSRs
               </span>
             </div>
           </div>
-          <div className="grid min-w-0 gap-3 sm:grid-cols-3 lg:w-[520px]">
-            <div className="rounded-lg border border-white/15 bg-white/10 p-4">
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-blue-100">Payable</p>
-              <p className="mt-2 text-2xl font-black">{formatCurrency(payableToday)}</p>
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+            <div className="rounded-[28px] border border-white/15 bg-white/10 p-5">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Payable Today</p>
+              <p className="mt-3 text-3xl font-black tracking-tight">{formatCurrency(payableToday)}</p>
+              <p className="mt-2 text-sm font-medium text-cyan-50/80">Expected cash from completed evening settlements.</p>
             </div>
-            <div className="rounded-lg border border-white/15 bg-white/10 p-4">
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-blue-100">Stock Value</p>
-              <p className="mt-2 text-2xl font-black">{formatCurrency(stockValue)}</p>
+            <div className="rounded-[28px] border border-white/15 bg-white/10 p-5">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Stock Value</p>
+              <p className="mt-3 text-3xl font-black tracking-tight">{formatCurrency(stockValue)}</p>
+              <p className="mt-2 text-sm font-medium text-cyan-50/80">Current inventory cost parked in the warehouse.</p>
             </div>
-            <div className="rounded-lg border border-white/15 bg-white/10 p-4">
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-blue-100">Units</p>
-              <p className="mt-2 text-2xl font-black">{formatNumber(stockUnits)}</p>
+            <div className="rounded-[28px] border border-white/15 bg-white/10 p-5">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Units in Stock</p>
+              <p className="mt-3 text-3xl font-black tracking-tight">{formatNumber(stockUnits)}</p>
+              <p className="mt-2 text-sm font-medium text-cyan-50/80">Pieces ready for issue across all products.</p>
+            </div>
+            <div className="rounded-[28px] border border-white/15 bg-white/10 p-5">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Possible Profit</p>
+              <p className="mt-3 text-3xl font-black tracking-tight">{formatCurrency(expectedStockProfit)}</p>
+              <p className="mt-2 text-sm font-medium text-cyan-50/80">Selling value minus current purchase cost.</p>
             </div>
           </div>
         </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Total Products" value={formatNumber(products.length)} helper="Fixed FMCG SKU list" icon={Boxes} tone="blue" />
-        <StatCard title="Stock Units" value={`${formatNumber(stockUnits)} pcs`} helper="Current inventory pieces" icon={PackageCheck} tone="slate" />
-        <StatCard title="Total Stock Value" value={formatCurrency(stockValue)} helper="Based on purchase price" icon={Warehouse} tone="indigo" />
-        <StatCard title="Sales Value in Stock" value={formatCurrency(stockSellingValue)} helper="If all stock is sold" icon={CircleDollarSign} tone="emerald" />
-        <StatCard title="Possible Profit" value={formatCurrency(expectedStockProfit)} helper="Selling value minus cost" icon={BarChart3} tone="emerald" />
+        <StatCard title="Products" value={formatNumber(products.length)} helper="Tracked FMCG SKUs" icon={Boxes} tone="blue" />
+        <StatCard title="Sales Value in Stock" value={formatCurrency(stockSellingValue)} helper="If all current stock sells" icon={CircleDollarSign} tone="emerald" />
         <StatCard title="Issued Today" value={`${formatNumber(totalIssuedToday)} pcs`} helper="Morning delivery quantity" icon={Truck} tone="amber" />
         <StatCard title="Returned Today" value={`${formatNumber(totalReturnedToday)} pcs`} helper="Added back after settlement" icon={RotateCcw} tone="slate" />
         <StatCard title="Sold Today" value={`${formatNumber(totalSoldToday)} pcs`} helper="Issued minus returned" icon={PackageCheck} tone="emerald" />
-        <StatCard title="Payable Today" value={formatCurrency(payableToday)} helper="DSR collection amount" icon={CircleDollarSign} tone="emerald" />
-        <StatCard title="Return Pending" value={`${formatNumber(pendingRows.length)} DSR`} helper="Evening settlement needed" icon={AlertTriangle} tone={pendingRows.length ? 'amber' : 'emerald'} />
-        <StatCard title="Completed Settlement" value={`${formatNumber(completedRows.length)} DSR`} helper={`${completionRate}% of issued DSRs`} icon={CheckCircle2} tone="blue" />
-        <StatCard title="Low Stock Products" value={formatNumber(lowStockAll.length)} helper={`${outOfStockCount} out of stock`} icon={AlertTriangle} tone={lowStockAll.length ? 'rose' : 'emerald'} />
-        <StatCard title="Active DSRs" value={formatNumber(activeDsrs)} helper="Available for route issue" icon={UserCheck} tone="blue" />
+        <StatCard title="Pending Return" value={`${formatNumber(pendingRows.length)} DSR`} helper="Still waiting for settlement" icon={AlertTriangle} tone={pendingRows.length ? 'amber' : 'emerald'} />
+        <StatCard title="Completed Settlement" value={`${formatNumber(completedRows.length)} DSR`} helper={`${completionRate}% of issued routes closed`} icon={CheckCircle2} tone="blue" />
+        <StatCard title="Low Stock" value={formatNumber(lowStockAll.length)} helper={`${outOfStockCount} fully out of stock`} icon={AlertTriangle} tone={lowStockAll.length ? 'rose' : 'emerald'} />
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-4">
         {ownerTasks.map((task) => {
           const Icon = task.icon;
           return (
-            <div key={task.title} className="surface p-4">
+            <div key={task.title} className="surface rounded-[28px] p-5">
               <div className="flex items-start gap-3">
-                <div className={cx('rounded-lg p-2.5', task.tone === 'emerald' && 'bg-emerald-50 text-emerald-700', task.tone === 'amber' && 'bg-amber-50 text-amber-700', task.tone === 'rose' && 'bg-rose-50 text-rose-700', task.tone === 'blue' && 'bg-blue-50 text-blue-700', task.tone === 'slate' && 'bg-slate-100 text-slate-700')}>
+                <div className={cx('rounded-2xl p-2.5', task.tone === 'emerald' && 'bg-emerald-50 text-emerald-700', task.tone === 'amber' && 'bg-amber-50 text-amber-700', task.tone === 'rose' && 'bg-rose-50 text-rose-700', task.tone === 'blue' && 'bg-blue-50 text-blue-700', task.tone === 'slate' && 'bg-slate-100 text-slate-700')}>
                   <Icon size={20} />
                 </div>
                 <div>
@@ -618,210 +744,68 @@ function DashboardPage({ products, dsrs, issues, settlements, today }) {
         })}
       </div>
 
+      <div className="mt-6 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <ChartPanel title="Trading Trend" description="Recent route activity across issue, sell-through, and payable collection.">
+          <TrendChart
+            data={tradingTrend}
+            valueFormatter={(value) => (value >= 1000 ? `${Math.round(value / 1000)}k` : `${Math.round(value)}`)}
+            series={[
+              { key: 'payable', label: 'Payable', color: '#0f766e', fill: 'rgba(15,118,110,0.14)' },
+              { key: 'issued', label: 'Issued', color: '#2563eb' },
+              { key: 'sold', label: 'Sold', color: '#f97316' },
+            ]}
+          />
+        </ChartPanel>
+
+        <ChartPanel title="Settlement Mix" description="How today’s active routes are split between completed, pending, and not yet issued.">
+          <DonutChart data={settlementMix} centerLabel="Active routes" centerValue={formatNumber(activeDsrs)} valueFormatter={(value) => `${formatNumber(value)} DSR`} />
+        </ChartPanel>
+      </div>
+
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <div className="surface p-5">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-blue-50 p-2.5 text-blue-700">
-              <ClipboardList size={20} />
-            </div>
-            <div>
-              <h2 className="text-base font-black text-slate-950">Today Easy Summary</h2>
-              <p className="text-sm font-medium text-slate-500">Simple numbers for owner checking.</p>
-            </div>
-          </div>
-          <div className="mt-5 space-y-3">
-            <InsightLine label="DSR given products" value={`${formatNumber(issuedDsrIds.size)} / ${formatNumber(activeDsrs)}`} />
+        <ChartPanel title="Inventory by Category" description="Where most of the warehouse money is currently tied up.">
+          {inventoryByCategory.length ? <HorizontalBarChart data={inventoryByCategory.slice(0, 6)} valueFormatter={formatCurrency} /> : <EmptyState title="No inventory data yet" description="Add products to see category distribution." icon={Boxes} />}
+        </ChartPanel>
+
+        <ChartPanel title="Route Performance" description="Top routes by collected value with sold, returned, and issued movement layered together.">
+          {routePerformance.length ? (
+            <StackedBarChart
+              data={routePerformance}
+              segments={[
+                { key: 'issued', label: 'Issued', color: '#bfdbfe' },
+                { key: 'returned', label: 'Returned', color: '#fdba74' },
+                { key: 'sold', label: 'Sold', color: '#0f766e' },
+              ]}
+              totalFormatter={(value) => `${formatNumber(value)} pcs`}
+            />
+          ) : (
+            <EmptyState title="No route movement today" description="Create a morning issue to start route performance tracking." icon={Truck} />
+          )}
+        </ChartPanel>
+
+        <ChartPanel title="Top Products by Cash" description="Products generating the strongest payable amount from today’s settlements.">
+          {topPayableProducts.length ? <HorizontalBarChart data={topPayableProducts} valueFormatter={formatCurrency} trackClassName="bg-emerald-50" /> : <EmptyState title="No sold products yet" description="Complete evening settlements to unlock product cash ranking." icon={PackageCheck} />}
+        </ChartPanel>
+      </div>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <ChartPanel title="Friendly Summary" description="Simple owner-facing checkpoints without needing to read the full tables.">
+          <div className="grid gap-3 md:grid-cols-2">
+            <InsightLine label="DSRs issued today" value={`${formatNumber(issuedDsrIds.size)} / ${formatNumber(activeDsrs)}`} />
             <InsightLine label="Issue sheets made" value={formatNumber(todayIssues.length)} />
-            <InsightLine label="Settlement done" value={`${formatNumber(completedRows.length)} DSR`} />
             <InsightLine label="Average cash per DSR" value={formatCurrency(averagePayable)} />
             <InsightLine label="Active DSR not issued" value={`${formatNumber(notIssuedDsrs.length)} DSR`} />
+            <InsightLine label="Highest stock value SKU" value={topStockValueProducts[0] ? topStockValueProducts[0].name : '-'} />
+            <InsightLine label="Best sold today" value={topSoldProducts[0] ? topSoldProducts[0].productName : '-'} />
           </div>
-        </div>
+        </ChartPanel>
 
-        <div className="surface p-5">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-amber-50 p-2.5 text-amber-700">
-              <RotateCcw size={20} />
-            </div>
-            <div>
-              <h2 className="text-base font-black text-slate-950">Need Evening Return</h2>
-              <p className="text-sm font-medium text-slate-500">These DSRs still need settlement.</p>
-            </div>
+        <ChartPanel title="Action Queue" description="The next things a manager can resolve fastest from this screen.">
+          <div className="space-y-3">
+            {pendingRows.length ? pendingRows.slice(0, 4).map((row) => <InsightLine key={row.dsrId} label={`${row.dsrName} - ${row.area}`} value={`${formatNumber(row.issuedPieces)} pcs pending`} />) : <div className="rounded-2xl bg-emerald-50 px-4 py-4 text-sm font-bold text-emerald-700">No DSR return is pending right now.</div>}
+            {lowStockProducts.length ? lowStockProducts.slice(0, 3).map((product) => <InsightLine key={product.id} label={product.name} value={formatCasePiece(product.stockPieces, product.piecesPerCase)} />) : <div className="rounded-2xl bg-sky-50 px-4 py-4 text-sm font-bold text-sky-700">Stock levels are healthy across your current product list.</div>}
           </div>
-          <div className="mt-5 space-y-3">
-            {pendingRows.length ? (
-              pendingRows.slice(0, 5).map((row) => (
-                <InsightLine key={row.dsrId} label={`${row.dsrName} - ${row.area}`} value={`${formatNumber(row.issuedPieces)} pcs`} />
-              ))
-            ) : (
-              <div className="rounded-lg bg-emerald-50 px-3 py-3 text-sm font-bold text-emerald-700">No DSR return is pending.</div>
-            )}
-          </div>
-        </div>
-
-        <div className="surface p-5">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-rose-50 p-2.5 text-rose-700">
-              <AlertTriangle size={20} />
-            </div>
-            <div>
-              <h2 className="text-base font-black text-slate-950">Stock Danger</h2>
-              <p className="text-sm font-medium text-slate-500">Products that may finish soon.</p>
-            </div>
-          </div>
-          <div className="mt-5 space-y-3">
-            {lowStockProducts.length ? (
-              lowStockProducts.slice(0, 5).map((product) => <InsightLine key={product.id} label={product.name} value={formatCasePiece(product.stockPieces, product.piecesPerCase)} />)
-            ) : (
-              <div className="rounded-lg bg-emerald-50 px-3 py-3 text-sm font-bold text-emerald-700">No stock danger found.</div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="surface overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-4">
-            <h2 className="text-base font-bold text-slate-950">Low Stock Products</h2>
-            <p className="mt-1 text-sm text-slate-500">Products below four cases are shown first.</p>
-          </div>
-          {lowStockProducts.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="table-head">
-                  <tr>
-                    <th className="px-4 py-3">Product</th>
-                    <th className="px-4 py-3">Category</th>
-                    <th className="px-4 py-3">Stock</th>
-                    <th className="px-4 py-3 text-right">Value</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {lowStockProducts.map((product) => (
-                    <tr key={product.id} className="hover:bg-slate-50">
-                      <td className="table-cell font-semibold text-slate-950">{product.name}</td>
-                      <td className="table-cell">{product.category}</td>
-                      <td className="table-cell">{formatCasePiece(product.stockPieces, product.piecesPerCase)}</td>
-                      <td className="table-cell text-right font-semibold">{formatCurrency(product.stockPieces * product.purchasePrice)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="p-5">
-              <EmptyState title="Stock levels look healthy" description="No product is below the low-stock threshold." icon={CheckCircle2} />
-            </div>
-          )}
-        </div>
-
-        <div className="surface overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-4">
-            <h2 className="text-base font-bold text-slate-950">Today's DSR Settlement Summary</h2>
-            <p className="mt-1 text-sm text-slate-500">Pending DSRs still need evening return entry.</p>
-          </div>
-          {dsrSummary.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="table-head">
-                  <tr>
-                    <th className="px-4 py-3">DSR</th>
-                    <th className="px-4 py-3">Sold</th>
-                    <th className="px-4 py-3">Payable</th>
-                    <th className="px-4 py-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {dsrSummary.map((row) => (
-                    <tr key={row.dsrId} className="hover:bg-slate-50">
-                      <td className="table-cell">
-                        <p className="font-semibold text-slate-950">{row.dsrName}</p>
-                        <p className="text-xs text-slate-500">{row.area}</p>
-                      </td>
-                      <td className="table-cell">{formatNumber(row.soldPieces)} pcs</td>
-                      <td className="table-cell font-bold">{formatCurrency(row.totalPayable)}</td>
-                      <td className="table-cell">
-                        <Badge tone={statusTone(row.status)}>{row.status}</Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="p-5">
-              <EmptyState title="No DSR movement today" description="Create a morning issue to start today's settlement flow." icon={ClipboardList} />
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <div className="surface overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-4">
-            <h2 className="text-base font-black text-slate-950">Highest Money in Stock</h2>
-            <p className="mt-1 text-sm font-medium text-slate-500">These products hold the most inventory money.</p>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {topStockValueProducts.map((product) => (
-              <div key={product.id} className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-slate-50">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-slate-950">{product.name}</p>
-                  <p className="mt-0.5 text-xs font-medium text-slate-500">{formatCasePiece(product.stockPieces, product.piecesPerCase)}</p>
-                </div>
-                <p className="shrink-0 text-sm font-black text-slate-950">{formatCurrency(product.stockPieces * product.purchasePrice)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="surface overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-4">
-            <h2 className="text-base font-black text-slate-950">Best Sold Today</h2>
-            <p className="mt-1 text-sm font-medium text-slate-500">Products that made the most money today.</p>
-          </div>
-          {topSoldProducts.length ? (
-            <div className="divide-y divide-slate-100">
-              {topSoldProducts.map((product) => (
-                <div key={product.productId} className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-slate-50">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-slate-950">{product.productName}</p>
-                    <p className="mt-0.5 text-xs font-medium text-slate-500">{formatNumber(product.soldPieces)} pcs sold</p>
-                  </div>
-                  <p className="shrink-0 text-sm font-black text-emerald-700">{formatCurrency(product.payable)}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-5">
-              <EmptyState title="No product sold yet" description="Complete evening settlement to see best sold products." icon={PackageCheck} />
-            </div>
-          )}
-        </div>
-
-        <div className="surface overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-4">
-            <h2 className="text-base font-black text-slate-950">Active DSR Not Issued</h2>
-            <p className="mt-1 text-sm font-medium text-slate-500">These active salesmen have no issue sheet today.</p>
-          </div>
-          {notIssuedDsrs.length ? (
-            <div className="divide-y divide-slate-100">
-              {notIssuedDsrs.map((dsr) => (
-                <div key={dsr.id} className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-slate-50">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-slate-950">{dsr.name}</p>
-                    <p className="mt-0.5 text-xs font-medium text-slate-500">{dsr.area}</p>
-                  </div>
-                  <Badge tone="amber">Not Issued</Badge>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-5">
-              <EmptyState title="All active DSRs are issued" description="Every active salesman has a morning issue sheet today." icon={UserCheck} />
-            </div>
-          )}
-        </div>
+        </ChartPanel>
       </div>
     </div>
   );
@@ -829,7 +813,7 @@ function DashboardPage({ products, dsrs, issues, settlements, today }) {
 
 function InsightLine({ label, value }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(248,250,252,0.95))] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
       <span className="min-w-0 truncate text-sm font-bold text-slate-600">{label}</span>
       <span className="shrink-0 text-sm font-black text-slate-950">{value}</span>
     </div>
@@ -1724,6 +1708,23 @@ function DailyReportsPage({ products, dsrs, issues, settlements, today }) {
     }),
     { issuedPieces: 0, returnedPieces: 0, soldPieces: 0, totalPayable: 0 },
   );
+  const chartRows = rows
+    .filter((row) => row.status !== 'No Issue')
+    .sort((a, b) => b.totalPayable - a.totalPayable)
+    .slice(0, 6)
+    .map((row) => ({
+      label: row.dsrName,
+      meta: row.area,
+      issued: row.issuedPieces,
+      returned: row.returnedPieces,
+      sold: row.soldPieces,
+      totalPayable: row.totalPayable,
+    }));
+  const reportMix = [
+    { label: 'Completed', value: rows.filter((row) => row.status === 'Completed').length, color: '#0f766e' },
+    { label: 'Pending', value: rows.filter((row) => row.status === 'Pending').length, color: '#f59e0b' },
+    { label: 'No Issue', value: rows.filter((row) => row.status === 'No Issue').length, color: '#cbd5e1' },
+  ];
 
   useEffect(() => {
     setSelectedSheet(null);
@@ -1736,10 +1737,10 @@ function DailyReportsPage({ products, dsrs, issues, settlements, today }) {
 
   return (
     <div>
-      <SectionHeader eyebrow="Daily close" title="Daily Reports" description="Filter by date, review DSR totals, and print settlement sheets for audit or collection records." />
+      <SectionHeader eyebrow="Daily close" title="Daily Reports" description="Filter by date, review route totals visually, and print settlement sheets for audit or collection records." />
 
       <div className="mb-6 grid gap-4 lg:grid-cols-[320px_1fr]">
-        <div className="surface p-5">
+        <div className="surface rounded-[28px] p-5">
           <label className="label">Report Date</label>
           <input className="input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
         </div>
@@ -1751,9 +1752,31 @@ function DailyReportsPage({ products, dsrs, issues, settlements, today }) {
         </div>
       </div>
 
-      <div className="surface overflow-hidden">
+      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <ChartPanel title={`Route Report for ${formatDate(date)}`} description="Compare DSR performance and movement without reading every row first.">
+          {chartRows.length ? (
+            <StackedBarChart
+              data={chartRows}
+              segments={[
+                { key: 'issued', label: 'Issued', color: '#bfdbfe' },
+                { key: 'returned', label: 'Returned', color: '#fdba74' },
+                { key: 'sold', label: 'Sold', color: '#0f766e' },
+              ]}
+              totalFormatter={(value) => `${formatNumber(value)} pcs`}
+            />
+          ) : (
+            <EmptyState title="No route movement on this date" description="Choose another date or create route activity first." icon={FileText} />
+          )}
+        </ChartPanel>
+
+        <ChartPanel title="Status Mix" description="A quick split of completed, pending, and no-issue routes for the selected day.">
+          <DonutChart data={reportMix} centerLabel="Routes" centerValue={formatNumber(rows.length)} valueFormatter={(value) => `${formatNumber(value)} DSR`} />
+        </ChartPanel>
+      </div>
+
+      <div className="surface mt-6 overflow-hidden">
         <div className="border-b border-slate-100 px-5 py-4">
-          <h2 className="text-base font-bold text-slate-950">DSR Report for {formatDate(date)}</h2>
+          <h2 className="text-base font-bold text-slate-950">DSR Table for {formatDate(date)}</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
