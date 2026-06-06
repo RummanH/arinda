@@ -93,7 +93,7 @@ async function watchAndServe() {
 async function deploy() {
   const watchMode = process.argv.includes('--watch');
   const installOnly = process.argv.includes('--install-only');
-  await run(nodeExecutable, [npmCliPath, 'install']);
+  await run(nodeExecutable, [npmCliPath, 'install', '--include=dev']);
 
   if (installOnly) {
     return;
