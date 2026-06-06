@@ -484,32 +484,34 @@ export default function App() {
     <div className="page-shell">
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       <Sidebar activePage={activePage} onNavigate={setActivePage} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
-      <div className="lg:pl-72">
+      <div className="flex h-screen min-h-0 flex-col lg:pl-72">
         <TopHeader title={pageTitle} today={today} onOpenMenu={() => setMobileOpen(true)} />
-        <main className="relative z-10 mx-auto max-w-[1600px] px-4 py-7 sm:px-6 lg:px-8">
-          {loadError ? (
-            <div className="mb-6">
-              <Alert type="error">{loadError}</Alert>
-            </div>
-          ) : null}
-          {activePage === 'dashboard' ? <DashboardPage {...pageProps} /> : null}
-          {activePage === 'products' ? (
-            <ProductsPage
-              products={products}
-              onAdd={() => setProductModal({ mode: 'add' })}
-              onEdit={(product) => setProductModal({ mode: 'edit', product })}
-              onDelete={handleDeleteProduct}
-              onStock={(product) => setStockModalProduct(product)}
-            />
-          ) : null}
-          {activePage === 'dsr' ? (
-            <DsrPage dsrs={dsrs} issues={issues} settlements={settlements} today={today} onAdd={() => setDsrModal({ mode: 'add' })} onEdit={(dsr) => setDsrModal({ mode: 'edit', dsr })} onDelete={handleDeleteDsr} />
-          ) : null}
-          {activePage === 'morning' ? <MorningIssuePage {...pageProps} onSaveIssue={handleSaveIssue} /> : null}
-          {activePage === 'settlement' ? <EveningSettlementPage {...pageProps} onCompleteSettlement={handleCompleteSettlement} /> : null}
-          {activePage === 'reports' ? <DailyReportsPage {...pageProps} /> : null}
-          {activePage === 'history' ? <HistoryPage {...pageProps} /> : null}
-        </main>
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+          <main className="relative z-10 mx-auto max-w-[1600px] px-4 py-7 sm:px-6 lg:px-8">
+            {loadError ? (
+              <div className="mb-6">
+                <Alert type="error">{loadError}</Alert>
+              </div>
+            ) : null}
+            {activePage === 'dashboard' ? <DashboardPage {...pageProps} /> : null}
+            {activePage === 'products' ? (
+              <ProductsPage
+                products={products}
+                onAdd={() => setProductModal({ mode: 'add' })}
+                onEdit={(product) => setProductModal({ mode: 'edit', product })}
+                onDelete={handleDeleteProduct}
+                onStock={(product) => setStockModalProduct(product)}
+              />
+            ) : null}
+            {activePage === 'dsr' ? (
+              <DsrPage dsrs={dsrs} issues={issues} settlements={settlements} today={today} onAdd={() => setDsrModal({ mode: 'add' })} onEdit={(dsr) => setDsrModal({ mode: 'edit', dsr })} onDelete={handleDeleteDsr} />
+            ) : null}
+            {activePage === 'morning' ? <MorningIssuePage {...pageProps} onSaveIssue={handleSaveIssue} /> : null}
+            {activePage === 'settlement' ? <EveningSettlementPage {...pageProps} onCompleteSettlement={handleCompleteSettlement} /> : null}
+            {activePage === 'reports' ? <DailyReportsPage {...pageProps} /> : null}
+            {activePage === 'history' ? <HistoryPage {...pageProps} /> : null}
+          </main>
+        </div>
       </div>
 
       {productModal ? <ProductFormModal product={productModal.product} onClose={() => setProductModal(null)} onSave={handleSaveProduct} /> : null}
@@ -550,7 +552,7 @@ function Sidebar({ activePage, onNavigate, mobileOpen, setMobileOpen }) {
           <p className="mt-2 text-sm font-medium leading-6 text-slate-300">Centralized control for stock, route issue, settlement, and daily reporting.</p>
         </div>
 
-        <nav className="relative mt-5 space-y-1.5">
+        <nav className="premium-scrollbar relative mt-5 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = activePage === item.id;

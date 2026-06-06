@@ -15,6 +15,7 @@
   }
 
   html {
+    height: 100%;
     font-family: 'Avenir Next', 'Trebuchet MS', 'Segoe UI', sans-serif;
   }
 
@@ -22,11 +23,17 @@
     margin: 0;
     min-width: 320px;
     min-height: 100vh;
+    height: 100%;
+    overflow: hidden;
     background:
       radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 28%),
       radial-gradient(circle at top right, rgba(16, 185, 129, 0.12), transparent 22%),
       linear-gradient(180deg, #f7fafc 0%, #eef6f9 50%, #f5fbf8 100%);
     color: #0f172a;
+  }
+
+  #root {
+    height: 100%;
   }
 
   button,
@@ -80,7 +87,7 @@
   }
 
   .page-shell {
-    @apply relative min-h-screen overflow-hidden;
+    @apply relative h-screen overflow-hidden;
   }
 
   .page-shell::before {
