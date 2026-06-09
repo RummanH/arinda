@@ -19,6 +19,7 @@ export function normalizeProduct(input) {
     purchasePrice: cleanMoney(input.purchasePrice),
     sellingPrice: cleanMoney(input.sellingPrice),
     stockPieces: cleanInteger(input.stockPieces),
+    orderIndex: (input.orderIndex !== undefined && input.orderIndex !== null && String(input.orderIndex).trim() !== '') ? cleanInteger(input.orderIndex) : null,
   };
 }
 

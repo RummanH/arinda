@@ -5,7 +5,7 @@ export class DsrController {
 
   list = async (req, res, next) => {
     try {
-      res.json(await this.inventoryService.listDsrs(req.query));
+      res.json(await this.inventoryService.listDsrs(req.query, req.currentUser));
     } catch (error) {
       next(error);
     }
@@ -13,7 +13,7 @@ export class DsrController {
 
   directory = async (req, res, next) => {
     try {
-      res.json(await this.inventoryService.getDsrsDirectory());
+      res.json(await this.inventoryService.getDsrsDirectory(req.currentUser));
     } catch (error) {
       next(error);
     }

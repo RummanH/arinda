@@ -1,8 +1,7 @@
 import { CalendarDays, CheckCircle2, LogOut, Menu, UserCircle } from 'lucide-react';
 import { formatDate } from '../utils/calculations';
-import LanguageSwitcher from './LanguageSwitcher';
 
-export default function TopHeader({ title, today, user, language, onLanguageChange, onLogout, onOpenMenu, t }) {
+export default function TopHeader({ title, today, user, onLogout, onOpenMenu, t }) {
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/80 shadow-[0_1px_0_rgba(15,23,42,0.03)] backdrop-blur-2xl no-print">
       <div className="mx-auto flex min-h-20 max-w-[1600px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
@@ -17,7 +16,6 @@ export default function TopHeader({ title, today, user, language, onLanguageChan
           </div>
         </div>
         <div className="hidden items-center gap-3 sm:flex">
-          <LanguageSwitcher language={language} onChange={onLanguageChange} t={t} />
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3.5 py-2 text-sm font-bold text-emerald-700">
             <CheckCircle2 size={17} />
             {t('status.liveData')}

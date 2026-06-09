@@ -5,7 +5,7 @@ export class ProductController {
 
   list = async (req, res, next) => {
     try {
-      res.json(await this.inventoryService.listProducts(req.query));
+      res.json(await this.inventoryService.listProducts(req.query, req.currentUser));
     } catch (error) {
       next(error);
     }
@@ -13,7 +13,7 @@ export class ProductController {
 
   directory = async (req, res, next) => {
     try {
-      res.json(await this.inventoryService.getProductsDirectory());
+      res.json(await this.inventoryService.getProductsDirectory(req.currentUser));
     } catch (error) {
       next(error);
     }

@@ -73,7 +73,7 @@ export class DsrFinanceService {
     this.auditService = auditService;
   }
 
-  async getReport(kind, query = {}) {
+  async getReport(kind, query = {}, actor) {
     const config = getModuleConfig(kind);
     const selectedDate = normalizeIsoDate(query.date, new Date().toISOString().slice(0, 10), config.dateError);
     const selectedMonth = normalizeIsoMonth(query.month, selectedDate.slice(0, 7));
@@ -84,11 +84,11 @@ export class DsrFinanceService {
     const client = await this.databaseManager.getPool().connect();
     try {
       if (selectedDsrId) {
-        const dsrResult = await findDsrById(client, selectedDsrId);
+        const dsrResult = await findDsrById(client, selectedDsrId, actor.tenantId);
         assert(dsrResult.rowCount > 0, 'Select a valid DSR.');
       }
 
-      const monthlyRecords = await listRecordsInRange(client, config, monthStart, nextMonthStart, selectedDsrId);
+      const monthlyRecords = await listRecordsInRange(client, config, monthStart, nextMonthStart, selectedDsrId, actor.tenantId);
       const dailyRecords = monthlyRecords.filter((record) => record.date === selectedDate);
 
       return {
@@ -111,14 +111,14 @@ export class DsrFinanceService {
     const record = normalizeRecord(input, fallbackDate, config.dateError);
 
     return this.databaseManager.withTransaction(async (client) => {
-      const dsrResult = await findDsrById(client, record.dsrId);
+      const dsrResult = await findDsrById(client, record.dsrId, actor.tenantId);
       assert(dsrResult.rowCount > 0, 'Select a valid DSR.');
 
       if (input.id) {
-        const existingRecord = await findRecordById(client, config, record.id);
+        const existingRecord = await findRecordById(client, config, record.id, actor.tenantId);
         assert(existingRecord, `${config.label} not found.`, 404);
 
-        await updateRecord(client, config, record);
+        await updateRecord(client, config, record, actor.tenantId);
         await this.recordActivity(client, actor, {
           actionType: `${config.actionBase}.update`,
           entityType: config.entityType,
@@ -128,6 +128,7 @@ export class DsrFinanceService {
         });
       } else {
         record.performedBy = actor.id;
+        record.tenantId = actor.tenantId;
         await insertRecord(client, config, record);
         await this.recordActivity(client, actor, {
           actionType: `${config.actionBase}.create`,
@@ -138,7 +139,7 @@ export class DsrFinanceService {
         });
       }
 
-      const saved = await findRecordById(client, config, record.id);
+      const saved = await findRecordById(client, config, record.id, actor.tenantId);
       assert(saved, `${config.label} not found.`, 404);
       return saved;
     });
@@ -148,10 +149,10 @@ export class DsrFinanceService {
     const config = getModuleConfig(kind);
 
     return this.databaseManager.withTransaction(async (client) => {
-      const existingRecord = await findRecordById(client, config, recordId);
+      const existingRecord = await findRecordById(client, config, recordId, actor.tenantId);
       assert(existingRecord, `${config.label} not found.`, 404);
 
-      const result = await deleteRecord(client, config, recordId);
+      const result = await deleteRecord(client, config, recordId, actor.tenantId);
       assert(result.rowCount > 0, `${config.label} not found.`, 404);
 
       await this.recordActivity(client, actor, {
@@ -172,6 +173,7 @@ export class DsrFinanceService {
     }
 
     await this.auditService.record(client, {
+      tenantId: actor.tenantId,
       userId: actor.id,
       actionType: payload.actionType,
       entityType: payload.entityType,

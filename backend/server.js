@@ -11,6 +11,7 @@ import { ExpenseService } from './services/expenseService.js';
 import { InventoryService } from './services/inventoryService.js';
 import { UserService } from './services/userService.js';
 import { BackupService } from './services/backupService.js';
+import { TenantService } from './services/tenantService.js';
 
 dotenv.config({ path: `${backendRoot}/.env` });
 
@@ -27,7 +28,8 @@ async function start() {
   const dsrFinanceService = new DsrFinanceService(databaseManager, { auditService });
   const monthEndSummaryService = new MonthEndSummaryService(databaseManager);
   const backupService = new BackupService(databaseManager, { auditService });
-  const app = createApp({ authService, env, inventoryService, auditService, userService, expenseService, dsrFinanceService, monthEndSummaryService, backupService, databaseManager });
+  const tenantService = new TenantService(databaseManager);
+  const app = createApp({ authService, env, inventoryService, auditService, userService, expenseService, dsrFinanceService, monthEndSummaryService, backupService, databaseManager, tenantService });
 
   app.listen(env.PORT, () => {
     console.log(`Server running on http://localhost:${env.PORT}`);

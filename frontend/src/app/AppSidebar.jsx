@@ -4,13 +4,13 @@ import { Badge, cx } from '../components/ui';
 import { APP_ROUTES } from './routes';
 import LanguageSwitcher from './LanguageSwitcher';
 
-export default function AppSidebar({ mobileOpen, setMobileOpen, user, language, onLanguageChange, onLogout, t, can }) {
+export default function AppSidebar({ mobileOpen, setMobileOpen, user, tenant, language, onLanguageChange, onLogout, t, can }) {
   const sections = ['overview', 'operations', 'finance', 'governance'];
   const groupedRoutes = sections
     .map((section) => ({
       section,
       label: t(`navGroups.${section}`),
-      routes: APP_ROUTES.filter((route) => route.group === section && (!route.permission || can(route.permission))),
+      routes: APP_ROUTES.filter((route) => route.group === section && (!route.permission || can(route.permission)) && (!route.role || user?.role === route.role)),
     }))
     .filter((item) => item.routes.length > 0);
 
@@ -18,19 +18,17 @@ export default function AppSidebar({ mobileOpen, setMobileOpen, user, language, 
     <>
       <div
         className={cx(
-          'shell-surface fixed inset-y-0 left-0 z-40 flex w-[min(18rem,85vw)] flex-col overflow-hidden px-4 py-5 text-slate-900 transition-transform duration-300 lg:w-72 lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 flex w-[min(18rem,85vw)] flex-col overflow-hidden border-r border-slate-200/70 bg-white/80 px-4 py-5 text-slate-900 shadow-[0_1px_0_rgba(15,23,42,0.03)] backdrop-blur-2xl transition-transform duration-300 lg:w-72 lg:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-[var(--secondary-soft)] to-transparent" />
-        <div className="pointer-events-none absolute -right-10 top-20 h-40 w-40 rounded-full bg-sky-400/10 blur-3xl" />
         <div className="relative flex items-center justify-between px-2">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,var(--secondary-strong),var(--bg-dark))] text-white shadow-[0_16px_32px_var(--secondary-shadow)]">
               <Warehouse size={22} />
             </div>
             <div>
-              <h2 className="mt-1 text-xl font-black tracking-normal text-slate-950">{t('app.brand')}</h2>
+              <h2 className="mt-1 text-xl font-black tracking-normal text-slate-950">{tenant?.name || t('app.brand')}</h2>
               {t('app.subtitle') ? <p className="text-xs font-semibold text-slate-500">{t('app.subtitle')}</p> : null}
             </div>
           </div>
@@ -57,10 +55,10 @@ export default function AppSidebar({ mobileOpen, setMobileOpen, user, language, 
                         onClick={() => setMobileOpen(false)}
                         className={({ isActive }) =>
                           cx(
-                            'group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold transition',
+                            'group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-bold transition',
                             isActive
-                              ? 'border border-[var(--secondary-soft)] bg-[linear-gradient(135deg,rgba(239,246,255,0.98),rgba(255,255,255,0.98))] text-slate-950 shadow-[0_8px_20px_var(--secondary-shadow)]'
-                              : 'border border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950',
+                              ? 'bg-[var(--secondary-soft)] text-[var(--secondary-strong)]'
+                              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
                           )
                         }
                       >
@@ -68,14 +66,13 @@ export default function AppSidebar({ mobileOpen, setMobileOpen, user, language, 
                           <>
                             <span
                               className={cx(
-                                'flex h-9 w-9 items-center justify-center rounded-2xl transition',
-                                isActive ? 'bg-[var(--secondary)] text-white' : 'bg-slate-100 text-slate-600 group-hover:bg-[var(--secondary-soft)] group-hover:text-[var(--secondary-strong)]',
+                                'flex h-8 w-8 items-center justify-center rounded-md transition',
+                                isActive ? 'bg-[var(--secondary)] text-white' : 'text-slate-500 group-hover:text-[var(--secondary-strong)]',
                               )}
                             >
-                              <Icon size={18} />
+                              <Icon size={17} />
                             </span>
                             <span className="flex-1">{t(route.labelKey)}</span>
-                            {isActive ? <span className="h-2.5 w-2.5 rounded-full bg-[var(--secondary)] shadow-[0_0_0_4px_var(--secondary-soft)]" /> : null}
                           </>
                         )}
                       </NavLink>
@@ -87,7 +84,7 @@ export default function AppSidebar({ mobileOpen, setMobileOpen, user, language, 
           </div>
         </nav>
 
-        <div className="relative mt-4 rounded-[28px] border border-slate-200 bg-white/95 p-4 shadow-[0_16px_35px_rgba(15,23,42,0.08)] sm:p-4">
+        <div className="relative mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4 sm:p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               <UserCircle size={18} className="shrink-0 text-[var(--secondary)]" />
@@ -103,7 +100,7 @@ export default function AppSidebar({ mobileOpen, setMobileOpen, user, language, 
           </div>
           <button
             type="button"
-            className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+            className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
             onClick={onLogout}
           >
             <LogOut size={16} />

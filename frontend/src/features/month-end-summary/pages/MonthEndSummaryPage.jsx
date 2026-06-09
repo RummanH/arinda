@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { BarChart3, BadgeDollarSign, Coins, ReceiptText, TrendingUp } from 'lucide-react';
+import { BarChart3, BadgeDollarSign, CircleDollarSign, Coins, ReceiptText, Tag, TrendingUp } from 'lucide-react';
 import { Alert, ChartPanel, EmptyState, LoadingState, SectionHeader, HorizontalBarChart, StatCard, TableSkeleton } from '../../../components/ui.jsx';
 import { MonthPickerField } from '../../../components/date-picker.jsx';
 import { useInventoryApp } from '../../../app/useInventoryApp.jsx';
@@ -25,7 +25,9 @@ export default function MonthEndSummaryPage() {
         />
         <div className="mb-6 grid gap-4 lg:grid-cols-[320px_1fr]">
           <LoadingState title={t('status.loadingData')} description={t('monthEndSummary.helper')} compact />
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <TableSkeleton rows={1} columns={1} showHeader={false} />
+            <TableSkeleton rows={1} columns={1} showHeader={false} />
             <TableSkeleton rows={1} columns={1} showHeader={false} />
             <TableSkeleton rows={1} columns={1} showHeader={false} />
             <TableSkeleton rows={1} columns={1} showHeader={false} />
@@ -39,7 +41,7 @@ export default function MonthEndSummaryPage() {
           <LoadingState title={t('status.loadingData')} description={t('monthEndSummary.summaryNotesDescription')} />
         </div>
         <div className="mt-6">
-          <TableSkeleton rows={8} columns={7} />
+          <TableSkeleton rows={8} columns={8} />
         </div>
       </div>
     );
@@ -65,13 +67,15 @@ export default function MonthEndSummaryPage() {
           <MonthPickerField value={vm.month} onChange={vm.setMonth} />
           <p className="mt-3 text-sm text-slate-500">{t('monthEndSummary.helper')}</p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard title={t('monthEndSummary.totalPayable')} value={formatCurrency(vm.report?.totals?.totalPayable || 0)} icon={Coins} tone="blue" />
-          <StatCard title={t('monthEndSummary.settlementPaid')} value={formatCurrency(vm.report?.totals?.totalSettlementPaid || 0)} icon={BadgeDollarSign} tone="emerald" />
+          <StatCard title={t('monthEndSummary.totalDiscount')} value={formatCurrency(vm.report?.totals?.totalDiscount || 0)} icon={Tag} tone="slate" />
+          <StatCard title={t('monthEndSummary.settlementPaid')} value={formatCurrency(vm.report?.totals?.totalPaidAtSettlement || 0)} icon={BadgeDollarSign} tone="emerald" />
           <StatCard title={t('monthEndSummary.cashReceived')} value={formatCurrency(vm.report?.totals?.totalCashReceived || 0)} icon={ReceiptText} tone="amber" />
-          <StatCard title={t('monthEndSummary.advanceGiven')} value={formatCurrency(vm.report?.totals?.totalAdvance || 0)} icon={TrendingUp} tone="slate" />
-          <StatCard title={t('monthEndSummary.remainingDue')} value={formatCurrency(vm.report?.totals?.remainingDue || 0)} icon={BarChart3} tone="rose" />
-          <StatCard title={t('monthEndSummary.netBalance')} value={formatCurrency(vm.report?.totals?.netBalance || 0)} icon={BarChart3} tone="slate" />
+          <StatCard title={t('monthEndSummary.advanceGiven')} value={formatCurrency(vm.report?.totals?.totalAdvance || 0)} icon={TrendingUp} tone="rose" />
+          <StatCard title={t('monthEndSummary.totalExpenses')} value={formatCurrency(vm.report?.totalExpenses || 0)} icon={CircleDollarSign} tone="slate" />
+          <StatCard title={t('monthEndSummary.remainingDue')} value={formatCurrency(vm.report?.totals?.remainingDue || 0)} icon={BarChart3} tone="amber" />
+          <StatCard title={t('monthEndSummary.netBalance')} value={formatCurrency(vm.report?.totals?.netBalance || 0)} icon={BarChart3} tone="blue" />
         </div>
       </div>
 
@@ -85,10 +89,11 @@ export default function MonthEndSummaryPage() {
         </ChartPanel>
 
         <ChartPanel title={t('monthEndSummary.summaryNotes')} description={t('monthEndSummary.summaryNotesDescription')}>
-          <div className="space-y-3 text-sm text-slate-600">
+          <div className="space-y-2 text-sm text-slate-600">
             <p>{t('monthEndSummary.formula1')}</p>
             <p>{t('monthEndSummary.formula2')}</p>
             <p>{t('monthEndSummary.formula3')}</p>
+            <p>{t('monthEndSummary.formula4')}</p>
           </div>
         </ChartPanel>
       </div>
@@ -106,7 +111,8 @@ export default function MonthEndSummaryPage() {
               <tr>
                 <th className="px-4 py-3">{t('dsr.title')}</th>
                 <th className="px-4 py-3">{t('monthEndSummary.totalPayable')}</th>
-                <th className="px-4 py-3">{t('monthEndSummary.settlementPaid')}</th>
+                <th className="px-4 py-3 hidden md:table-cell">{t('monthEndSummary.totalDiscount')}</th>
+                <th className="px-4 py-3 hidden lg:table-cell">{t('monthEndSummary.settlementPaid')}</th>
                 <th className="px-4 py-3 hidden sm:table-cell">{t('monthEndSummary.cashReceived')}</th>
                 <th className="px-4 py-3 hidden md:table-cell">{t('monthEndSummary.advanceGiven')}</th>
                 <th className="px-4 py-3 hidden sm:table-cell">{t('monthEndSummary.remainingDue')}</th>
@@ -121,7 +127,8 @@ export default function MonthEndSummaryPage() {
                     <p className="text-xs text-slate-500">{row.dsrArea}</p>
                   </td>
                   <td className="table-cell font-semibold">{formatCurrency(row.totalPayable)}</td>
-                  <td className="table-cell">{formatCurrency(row.totalSettlementPaid)}</td>
+                  <td className="table-cell hidden md:table-cell text-slate-500">{formatCurrency(row.totalDiscount)}</td>
+                  <td className="table-cell hidden lg:table-cell">{formatCurrency(row.totalPaidAtSettlement)}</td>
                   <td className="table-cell hidden sm:table-cell">{formatCurrency(row.totalCashReceived)}</td>
                   <td className="table-cell hidden md:table-cell">{formatCurrency(row.totalAdvance)}</td>
                   <td className="table-cell hidden sm:table-cell">{formatCurrency(row.remainingDue)}</td>

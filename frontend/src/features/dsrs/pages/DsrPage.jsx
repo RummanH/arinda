@@ -100,7 +100,7 @@ export default function DsrPage() {
                           <button type="button" className="icon-btn" title={t('common.edit')} onClick={() => setDsrModal({ mode: 'edit', dsr })}>
                             <Pencil size={16} />
                           </button>
-                          <button type="button" className="icon-btn text-rose-600 hover:text-rose-700" title={t('common.delete')} onClick={() => deleteDsr(dsr)}>
+                          <button type="button" className="icon-btn text-rose-600 hover:text-rose-700" title={t('common.delete')} onClick={async () => { const r = await deleteDsr(dsr); if (r.ok) vm.reload(); }}>
                             <Trash2 size={16} />
                           </button>
                         </>
@@ -131,6 +131,7 @@ export default function DsrPage() {
         const result = await saveDsr(value);
         if (result.ok) {
           setDsrModal(null);
+          vm.reload();
         }
         return result;
       }} /> : null}

@@ -8,8 +8,8 @@ import { formatCasePiece, formatCurrency, formatNumber } from '../../../utils/ca
 import { useSettlementViewModel } from '../viewmodels/useSettlementViewModel';
 
 export default function EveningSettlementPage() {
-  const { productDirectory, dsrDirectory, today, saveSettlement, t, can } = useInventoryApp();
-  const vm = useSettlementViewModel({ products: productDirectory, dsrs: dsrDirectory, today, saveSettlementAction: saveSettlement, t });
+  const { productDirectory, dsrDirectory, today, saveSettlement, t, can, tenant } = useInventoryApp();
+  const vm = useSettlementViewModel({ products: productDirectory, dsrs: dsrDirectory, today, saveSettlementAction: saveSettlement, t, tenantName: tenant?.name });
   const canCreateSettlement = can('create_settlements');
   const canUpdateSettlement = can('update_settlements');
   const canEditSettlement = vm.completedSettlement ? canUpdateSettlement : canCreateSettlement;

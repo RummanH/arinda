@@ -19,8 +19,9 @@ export function mapSettlement(row) {
   };
 }
 
-function buildSettlementFilterClause({ dsrId, dateFrom, dateTo, search }, params) {
-  const conditions = [];
+function buildSettlementFilterClause({ tenantId, dsrId, dateFrom, dateTo, search }, params) {
+  params.push(tenantId);
+  const conditions = [`tenant_id = $${params.length}`];
 
   if (dsrId) {
     params.push(dsrId);
@@ -39,7 +40,7 @@ function buildSettlementFilterClause({ dsrId, dateFrom, dateTo, search }, params
     conditions.push(`(dsr_name ILIKE $${params.length} OR area ILIKE $${params.length})`);
   }
 
-  return conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  return `WHERE ${conditions.join(' AND ')}`;
 }
 
 export async function countSettlements(client, filters = {}) {
@@ -49,9 +50,9 @@ export async function countSettlements(client, filters = {}) {
   return result.rows[0].count;
 }
 
-export async function listSettlementsPage(client, { dsrId, dateFrom, dateTo, search, limit, offset }) {
+export async function listSettlementsPage(client, { tenantId, dsrId, dateFrom, dateTo, search, limit, offset }) {
   const params = [];
-  const where = buildSettlementFilterClause({ dsrId, dateFrom, dateTo, search }, params);
+  const where = buildSettlementFilterClause({ tenantId, dsrId, dateFrom, dateTo, search }, params);
   params.push(limit, offset);
   const result = await client.query(
     `SELECT * FROM settlements ${where} ORDER BY settlement_date DESC, created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
@@ -62,11 +63,12 @@ export async function listSettlementsPage(client, { dsrId, dateFrom, dateTo, sea
 
 export function insertSettlement(client, settlement) {
   return client.query(
-    `INSERT INTO settlements (id, settlement_date, dsr_id, dsr_name, area, phone, issue_ids, items, extra_returns, total_payable, previous_due, discount, extra_return_value, amount_paid, due_amount, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11, $12, $13, $14, $15, $16)
+    `INSERT INTO settlements (id, tenant_id, settlement_date, dsr_id, dsr_name, area, phone, issue_ids, items, extra_returns, total_payable, previous_due, discount, extra_return_value, amount_paid, due_amount, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, $13, $14, $15, $16, $17)
      RETURNING *`,
     [
       settlement.id,
+      settlement.tenantId,
       settlement.date,
       settlement.dsrId,
       settlement.dsrName,
@@ -89,11 +91,12 @@ export function insertSettlement(client, settlement) {
 export function updateSettlement(client, settlement) {
   return client.query(
     `UPDATE settlements
-     SET settlement_date = $2, dsr_id = $3, dsr_name = $4, area = $5, phone = $6, issue_ids = $7::jsonb, items = $8::jsonb, extra_returns = $9::jsonb, total_payable = $10, previous_due = $11, discount = $12, extra_return_value = $13, amount_paid = $14, due_amount = $15, status = $16
-     WHERE id = $1
+     SET settlement_date = $3, dsr_id = $4, dsr_name = $5, area = $6, phone = $7, issue_ids = $8::jsonb, items = $9::jsonb, extra_returns = $10::jsonb, total_payable = $11, previous_due = $12, discount = $13, extra_return_value = $14, amount_paid = $15, due_amount = $16, status = $17
+     WHERE id = $1 AND tenant_id = $2
      RETURNING *`,
     [
       settlement.id,
+      settlement.tenantId,
       settlement.date,
       settlement.dsrId,
       settlement.dsrName,
@@ -113,17 +116,20 @@ export function updateSettlement(client, settlement) {
   );
 }
 
-export function findSettlementById(client, settlementId) {
-  return client.query('SELECT * FROM settlements WHERE id = $1 LIMIT 1', [settlementId]);
+export function findSettlementById(client, settlementId, tenantId) {
+  return client.query('SELECT * FROM settlements WHERE id = $1 AND tenant_id = $2 LIMIT 1', [settlementId, tenantId]);
 }
 
-export function findSettlementByDateAndDsr(client, date, dsrId) {
-  return client.query('SELECT * FROM settlements WHERE settlement_date = $1 AND dsr_id = $2 LIMIT 1', [date, dsrId]);
-}
-
-export function findDuplicateSettlement(client, date, dsrId, settlementId) {
+export function findSettlementByDateAndDsr(client, date, dsrId, tenantId) {
   return client.query(
-    'SELECT id FROM settlements WHERE settlement_date = $1 AND dsr_id = $2 AND id <> $3 LIMIT 1',
-    [date, dsrId, settlementId],
+    'SELECT * FROM settlements WHERE settlement_date = $1 AND dsr_id = $2 AND tenant_id = $3 LIMIT 1',
+    [date, dsrId, tenantId],
+  );
+}
+
+export function findDuplicateSettlement(client, date, dsrId, settlementId, tenantId) {
+  return client.query(
+    'SELECT id FROM settlements WHERE settlement_date = $1 AND dsr_id = $2 AND id <> $3 AND tenant_id = $4 LIMIT 1',
+    [date, dsrId, settlementId, tenantId],
   );
 }

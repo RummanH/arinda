@@ -1,6 +1,11 @@
 import pg from 'pg';
 
-const { Pool } = pg;
+const { Pool, types } = pg;
+
+// Return DATE columns as plain "YYYY-MM-DD" strings instead of JS Date objects.
+// The default parser converts to a Date which shifts by timezone offset and breaks
+// string equality checks like `record.date === selectedDate`.
+types.setTypeParser(1082, (val) => val);
 
 function createPool(connectionString) {
   return new Pool({

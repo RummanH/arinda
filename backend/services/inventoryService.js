@@ -52,12 +52,12 @@ function sumPiecesByProduct(items, field) {
   }, new Map());
 }
 
-async function lockProducts(client, productIds) {
+async function lockProducts(client, productIds, tenantId) {
   const uniqueIds = [...new Set(productIds.filter(Boolean))];
   const productMap = new Map();
 
   for (const productId of uniqueIds) {
-    const result = await findProductForUpdate(client, productId);
+    const result = await findProductForUpdate(client, productId, tenantId);
     assert(result.rowCount > 0, 'Product not found.', 404);
     productMap.set(productId, result.rows[0]);
   }
@@ -65,11 +65,11 @@ async function lockProducts(client, productIds) {
   return productMap;
 }
 
-async function applyIssueInventoryDelta(client, previousItems, nextItems) {
+async function applyIssueInventoryDelta(client, previousItems, nextItems, tenantId) {
   const previousTotals = sumPiecesByProduct(previousItems, 'issuedPieces');
   const nextTotals = sumPiecesByProduct(nextItems, 'issuedPieces');
   const productIds = [...new Set([...previousTotals.keys(), ...nextTotals.keys()])];
-  const productMap = await lockProducts(client, productIds);
+  const productMap = await lockProducts(client, productIds, tenantId);
 
   for (const productId of productIds) {
     const previousIssued = previousTotals.get(productId) || 0;
@@ -85,15 +85,18 @@ async function applyIssueInventoryDelta(client, previousItems, nextItems) {
       assert(Number(product.stock_pieces) >= difference, `${product.name} does not have enough available stock.`);
     }
 
-    await client.query('UPDATE products SET stock_pieces = stock_pieces - $2 WHERE id = $1', [productId, difference]);
+    await client.query(
+      'UPDATE products SET stock_pieces = stock_pieces - $3 WHERE id = $1 AND tenant_id = $2',
+      [productId, tenantId, difference],
+    );
   }
 }
 
-async function applySettlementInventoryDelta(client, previousItems, nextItems) {
+async function applySettlementInventoryDelta(client, previousItems, nextItems, tenantId) {
   const previousTotals = sumPiecesByProduct(previousItems, 'returnedPieces');
   const nextTotals = sumPiecesByProduct(nextItems, 'returnedPieces');
   const productIds = [...new Set([...previousTotals.keys(), ...nextTotals.keys()])];
-  const productMap = await lockProducts(client, productIds);
+  const productMap = await lockProducts(client, productIds, tenantId);
 
   for (const productId of productIds) {
     const previousReturned = previousTotals.get(productId) || 0;
@@ -109,7 +112,10 @@ async function applySettlementInventoryDelta(client, previousItems, nextItems) {
       assert(Number(product.stock_pieces) >= Math.abs(difference), `${product.name} does not have enough available stock for this settlement change.`);
     }
 
-    await client.query('UPDATE products SET stock_pieces = stock_pieces + $2 WHERE id = $1', [productId, difference]);
+    await client.query(
+      'UPDATE products SET stock_pieces = stock_pieces + $3 WHERE id = $1 AND tenant_id = $2',
+      [productId, tenantId, difference],
+    );
   }
 }
 
@@ -159,6 +165,7 @@ export class InventoryService {
     }
 
     await this.auditService.record(client, {
+      tenantId: actor.tenantId || null,
       userId: actor.id,
       actionType: payload.actionType,
       entityType: payload.entityType,
@@ -172,15 +179,16 @@ export class InventoryService {
     });
   }
 
-  async listProducts(query = {}) {
+  async listProducts(query = {}, actor) {
     const { page, pageSize, limit, offset } = parsePagination(query);
     const search = String(query.search || '').trim();
+    const tenantId = actor.tenantId;
 
     const client = await this.databaseManager.getPool().connect();
     try {
       const [items, total] = await Promise.all([
-        listProductsPage(client, { search, limit, offset }),
-        countProducts(client, { search }),
+        listProductsPage(client, { search, tenantId, limit, offset }),
+        countProducts(client, { search, tenantId }),
       ]);
 
       return buildPageResult({ items, total, page, pageSize });
@@ -189,24 +197,25 @@ export class InventoryService {
     }
   }
 
-  async getProductsDirectory() {
+  async getProductsDirectory(actor) {
     const client = await this.databaseManager.getPool().connect();
     try {
-      return { products: await listAllActiveProductsLite(client) };
+      return { products: await listAllActiveProductsLite(client, actor.tenantId) };
     } finally {
       client.release();
     }
   }
 
-  async listDsrs(query = {}) {
+  async listDsrs(query = {}, actor) {
     const { page, pageSize, limit, offset } = parsePagination(query);
     const search = String(query.search || '').trim();
+    const tenantId = actor.tenantId;
 
     const client = await this.databaseManager.getPool().connect();
     try {
       const [items, total] = await Promise.all([
-        listDsrsPage(client, { search, limit, offset }),
-        countDsrs(client, { search }),
+        listDsrsPage(client, { search, tenantId, limit, offset }),
+        countDsrs(client, { search, tenantId }),
       ]);
 
       return buildPageResult({ items, total, page, pageSize });
@@ -215,18 +224,19 @@ export class InventoryService {
     }
   }
 
-  async getDsrsDirectory() {
+  async getDsrsDirectory(actor) {
     const client = await this.databaseManager.getPool().connect();
     try {
-      return { dsrs: await listAllActiveDsrsLite(client) };
+      return { dsrs: await listAllActiveDsrsLite(client, actor.tenantId) };
     } finally {
       client.release();
     }
   }
 
-  async listIssues(query = {}) {
+  async listIssues(query = {}, actor) {
     const { page, pageSize, limit, offset } = parsePagination(query);
     const filters = {
+      tenantId: actor.tenantId,
       dsrId: String(query.dsrId || '').trim() || undefined,
       dateFrom: String(query.dateFrom || '').trim() || undefined,
       dateTo: String(query.dateTo || '').trim() || undefined,
@@ -246,9 +256,10 @@ export class InventoryService {
     }
   }
 
-  async listSettlements(query = {}) {
+  async listSettlements(query = {}, actor) {
     const { page, pageSize, limit, offset } = parsePagination(query);
     const filters = {
+      tenantId: actor.tenantId,
       dsrId: String(query.dsrId || '').trim() || undefined,
       dateFrom: String(query.dateFrom || '').trim() || undefined,
       dateTo: String(query.dateTo || '').trim() || undefined,
@@ -278,13 +289,14 @@ export class InventoryService {
       let result;
 
       if (input.id) {
-        const existingResult = await findProductForUpdate(client, product.id);
+        const existingResult = await findProductForUpdate(client, product.id, actor.tenantId);
         assert(existingResult.rowCount > 0, 'Product not found.', 404);
         assert(!Object.prototype.hasOwnProperty.call(input, 'stockPieces'), 'Stock can only be changed through Add Stock.');
 
         const existingProduct = existingResult.rows[0];
         const nextProduct = {
           ...product,
+          tenantId: actor.tenantId,
           stockPieces: Number(existingProduct.stock_pieces),
         };
 
@@ -300,6 +312,7 @@ export class InventoryService {
       } else {
         assert(!Object.prototype.hasOwnProperty.call(input, 'stockPieces'), 'Stock can only be changed through Add Stock.');
         product.stockPieces = 0;
+        product.tenantId = actor.tenantId;
         result = await insertProduct(client, product);
         await this.recordActivity(client, actor, {
           actionType: 'product.create',
@@ -316,7 +329,7 @@ export class InventoryService {
 
   async removeProduct(productId, actor) {
     return this.databaseManager.withTransaction(async (client) => {
-      const result = await deleteProduct(client, productId);
+      const result = await deleteProduct(client, productId, actor.tenantId);
       assert(result.rowCount > 0, 'Product not found.', 404);
       await this.recordActivity(client, actor, {
         actionType: 'product.delete',
@@ -333,7 +346,7 @@ export class InventoryService {
     assert(addPieces > 0, 'Stock update must be greater than zero.');
 
     return this.databaseManager.withTransaction(async (client) => {
-      const result = await addProductStock(client, productId, addPieces);
+      const result = await addProductStock(client, productId, addPieces, actor.tenantId);
       assert(result.rowCount > 0, 'Product not found.', 404);
       await this.recordActivity(client, actor, {
         actionType: 'product.stock_add',
@@ -354,6 +367,7 @@ export class InventoryService {
       let result;
 
       if (input.id) {
+        dsr.tenantId = actor.tenantId;
         result = await updateDsr(client, dsr);
         assert(result.rowCount > 0, 'DSR not found.', 404);
         await syncDsrHistory(client, dsr);
@@ -365,6 +379,7 @@ export class InventoryService {
           metadata: { name: dsr.name, status: dsr.status, area: dsr.area },
         });
       } else {
+        dsr.tenantId = actor.tenantId;
         result = await insertDsr(client, dsr);
         await this.recordActivity(client, actor, {
           actionType: 'dsr.create',
@@ -381,7 +396,7 @@ export class InventoryService {
 
   async removeDsr(dsrId, actor) {
     return this.databaseManager.withTransaction(async (client) => {
-      const result = await deleteDsr(client, dsrId);
+      const result = await deleteDsr(client, dsrId, actor.tenantId);
       assert(result.rowCount > 0, 'DSR not found.', 404);
       await this.recordActivity(client, actor, {
         actionType: 'dsr.delete',
@@ -395,18 +410,21 @@ export class InventoryService {
 
   async saveIssue(input, actor) {
     const issue = normalizeIssue(input);
+    issue.tenantId = actor.tenantId;
     assert(issue.date && issue.dsrId, 'Issue date and DSR are required.');
     assert(issue.items.length > 0, 'Enter issue quantity for at least one product.');
 
+    const tenantId = actor.tenantId;
+
     return this.databaseManager.withTransaction(async (client) => {
       if (input.id) {
-        const existingIssue = await findIssueById(client, issue.id);
+        const existingIssue = await findIssueById(client, issue.id, tenantId);
         assert(existingIssue.rowCount > 0, 'Issue not found.', 404);
 
         const previousIssue = existingIssue.rows[0];
         const previousItems = Array.isArray(previousIssue.items) ? previousIssue.items : [];
 
-        const settlementCheck = await findSettlementByDateAndDsr(client, previousIssue.issue_date, previousIssue.dsr_id);
+        const settlementCheck = await findSettlementByDateAndDsr(client, previousIssue.issue_date, previousIssue.dsr_id, tenantId);
 
         if (settlementCheck.rowCount > 0) {
           assert(
@@ -418,15 +436,15 @@ export class InventoryService {
         const targetSettlementCheck =
           issue.date === previousIssue.issue_date && issue.dsrId === previousIssue.dsr_id
             ? settlementCheck
-            : await findSettlementByDateAndDsr(client, issue.date, issue.dsrId);
+            : await findSettlementByDateAndDsr(client, issue.date, issue.dsrId, tenantId);
 
-        const duplicateIssue = await findDuplicateIssue(client, issue.date, issue.dsrId, issue.id);
+        const duplicateIssue = await findDuplicateIssue(client, issue.date, issue.dsrId, issue.id, tenantId);
         assert(duplicateIssue.rowCount === 0, 'Another morning issue already exists for this DSR and date.');
 
-        const dsrResult = await findDsrById(client, issue.dsrId);
+        const dsrResult = await findDsrById(client, issue.dsrId, tenantId);
         assert(dsrResult.rowCount > 0, 'Select a valid DSR.');
 
-        await applyIssueInventoryDelta(client, previousItems, issue.items);
+        await applyIssueInventoryDelta(client, previousItems, issue.items, tenantId);
         const issueResult = await updateIssue(client, issue);
 
         let settlement = null;
@@ -442,10 +460,11 @@ export class InventoryService {
               ? existingSettlement.extraReturns
               : [];
 
-          await applySettlementInventoryDelta(client, existingReturnItems, [...nextSettlementItems, ...nextExtraReturns]);
+          await applySettlementInventoryDelta(client, existingReturnItems, [...nextSettlementItems, ...nextExtraReturns], tenantId);
 
           const settlementResult = await updateSettlement(client, {
             id: existingSettlement.id,
+            tenantId,
             date: issue.date,
             dsrId: issue.dsrId,
             dsrName: issue.dsrName,
@@ -476,16 +495,16 @@ export class InventoryService {
         return { issue: mapIssue(issueResult.rows[0]), settlement };
       }
 
-      const settlementResult = await findSettlementByDateAndDsr(client, issue.date, issue.dsrId);
+      const settlementResult = await findSettlementByDateAndDsr(client, issue.date, issue.dsrId, tenantId);
       assert(settlementResult.rowCount === 0, 'Settlement is already completed for this DSR and date.');
 
-      const dsrResult = await findDsrById(client, issue.dsrId);
+      const dsrResult = await findDsrById(client, issue.dsrId, tenantId);
       assert(dsrResult.rowCount > 0, 'Select a valid DSR.');
 
-      const existingIssue = await findIssueByDateAndDsr(client, issue.date, issue.dsrId);
+      const existingIssue = await findIssueByDateAndDsr(client, issue.date, issue.dsrId, tenantId);
       assert(existingIssue.rowCount === 0, 'Morning issue already exists for this DSR and date. Edit that issue instead.');
 
-      await applyIssueInventoryDelta(client, [], issue.items);
+      await applyIssueInventoryDelta(client, [], issue.items, tenantId);
       const issueResult = await insertIssue(client, issue);
       await this.recordActivity(client, actor, {
         actionType: 'issue.create',
@@ -501,29 +520,32 @@ export class InventoryService {
 
   async updateIssue(issueId, input, actor) {
     const issue = normalizeIssue({ ...input, id: issueId });
+    issue.tenantId = actor.tenantId;
     assert(issue.date && issue.dsrId, 'Issue date and DSR are required.');
     assert(issue.items.length > 0, 'Enter issue quantity for at least one product.');
 
+    const tenantId = actor.tenantId;
+
     return this.databaseManager.withTransaction(async (client) => {
-      const existingIssue = await findIssueById(client, issue.id);
+      const existingIssue = await findIssueById(client, issue.id, tenantId);
       assert(existingIssue.rowCount > 0, 'Issue not found.', 404);
 
       const previousIssue = existingIssue.rows[0];
       const previousItems = Array.isArray(previousIssue.items) ? previousIssue.items : [];
 
-      const settlementCheck = await findSettlementByDateAndDsr(client, previousIssue.issue_date, previousIssue.dsr_id);
+      const settlementCheck = await findSettlementByDateAndDsr(client, previousIssue.issue_date, previousIssue.dsr_id, tenantId);
       assert(settlementCheck.rowCount === 0, 'This issue already has a completed settlement and cannot be edited.');
 
-      const targetSettlementCheck = await findSettlementByDateAndDsr(client, issue.date, issue.dsrId);
+      const targetSettlementCheck = await findSettlementByDateAndDsr(client, issue.date, issue.dsrId, tenantId);
       assert(targetSettlementCheck.rowCount === 0, 'Settlement is already completed for this DSR and date.');
 
-      const duplicateIssue = await findDuplicateIssue(client, issue.date, issue.dsrId, issue.id);
+      const duplicateIssue = await findDuplicateIssue(client, issue.date, issue.dsrId, issue.id, tenantId);
       assert(duplicateIssue.rowCount === 0, 'Another morning issue already exists for this DSR and date.');
 
-      const dsrResult = await findDsrById(client, issue.dsrId);
+      const dsrResult = await findDsrById(client, issue.dsrId, tenantId);
       assert(dsrResult.rowCount > 0, 'Select a valid DSR.');
 
-      await applyIssueInventoryDelta(client, previousItems, issue.items);
+      await applyIssueInventoryDelta(client, previousItems, issue.items, tenantId);
       const issueResult = await updateIssue(client, issue);
       await this.recordActivity(client, actor, {
         actionType: 'issue.update',
@@ -539,21 +561,24 @@ export class InventoryService {
 
   async saveSettlement(input, actor) {
     const settlement = normalizeSettlement(input);
+    settlement.tenantId = actor.tenantId;
     assert(settlement.date && settlement.dsrId, 'Settlement date and DSR are required.');
     assert(settlement.items.length > 0, 'No morning issue found for this DSR and date.');
 
+    const tenantId = actor.tenantId;
+
     return this.databaseManager.withTransaction(async (client) => {
       if (input.id) {
-        const existingSettlement = await findSettlementById(client, settlement.id);
+        const existingSettlement = await findSettlementById(client, settlement.id, tenantId);
         assert(existingSettlement.rowCount > 0, 'Settlement not found.', 404);
 
         const previousSettlement = existingSettlement.rows[0];
         const previousItems = Array.isArray(previousSettlement.items) ? previousSettlement.items : [];
 
-        const duplicateSettlement = await findDuplicateSettlement(client, settlement.date, settlement.dsrId, settlement.id);
+        const duplicateSettlement = await findDuplicateSettlement(client, settlement.date, settlement.dsrId, settlement.id, tenantId);
         assert(duplicateSettlement.rowCount === 0, 'Another settlement already exists for this DSR and date.');
 
-        const issueResult = await findIssueByDateAndDsr(client, settlement.date, settlement.dsrId);
+        const issueResult = await findIssueByDateAndDsr(client, settlement.date, settlement.dsrId, tenantId);
         assert(issueResult.rowCount > 0, 'No morning issue found for this DSR and date.');
 
         for (const item of settlement.items) {
@@ -563,7 +588,7 @@ export class InventoryService {
         const previousReturnItems = getSettlementReturnItems(previousSettlement);
         const nextReturnItems = getSettlementReturnItems(settlement);
 
-        await applySettlementInventoryDelta(client, previousReturnItems, nextReturnItems);
+        await applySettlementInventoryDelta(client, previousReturnItems, nextReturnItems, tenantId);
         const settlementResult = await updateSettlement(client, settlement);
         await this.recordActivity(client, actor, {
           actionType: 'settlement.update',
@@ -576,17 +601,17 @@ export class InventoryService {
         return mapSettlement(settlementResult.rows[0]);
       }
 
-      const existingSettlement = await findSettlementByDateAndDsr(client, settlement.date, settlement.dsrId);
+      const existingSettlement = await findSettlementByDateAndDsr(client, settlement.date, settlement.dsrId, tenantId);
       assert(existingSettlement.rowCount === 0, 'Settlement is already completed for this DSR and date.');
 
-      const issueResult = await findIssueByDateAndDsr(client, settlement.date, settlement.dsrId);
+      const issueResult = await findIssueByDateAndDsr(client, settlement.date, settlement.dsrId, tenantId);
       assert(issueResult.rowCount > 0, 'No morning issue found for this DSR and date.');
 
       for (const item of settlement.items) {
         assert(item.returnedPieces <= item.issuedPieces, 'Returned quantity cannot be greater than issued quantity.');
       }
 
-      await applySettlementInventoryDelta(client, [], getSettlementReturnItems(settlement));
+      await applySettlementInventoryDelta(client, [], getSettlementReturnItems(settlement), tenantId);
       const insertResult = await insertSettlement(client, settlement);
       await this.recordActivity(client, actor, {
         actionType: 'settlement.create',

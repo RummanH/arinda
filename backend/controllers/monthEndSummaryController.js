@@ -5,7 +5,7 @@ export class MonthEndSummaryController {
 
   getSummary = async (req, res, next) => {
     try {
-      const summary = await this.monthEndSummaryService.getSummary(req.query);
+      const summary = await this.monthEndSummaryService.getSummary(req.query, req.currentUser);
       res.json(summary);
     } catch (error) {
       next(error);

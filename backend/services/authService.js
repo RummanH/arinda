@@ -9,6 +9,7 @@ import {
   findUserByEmail,
   insertUserSession,
 } from '../repositories/userRepository.js';
+import { findTenantById, findTenantBySlug } from '../repositories/tenantRepository.js';
 
 function mapUser(row) {
   return {
@@ -17,6 +18,7 @@ function mapUser(row) {
     email: row.email,
     role: row.role,
     status: row.status,
+    tenantId: row.tenant_id || null,
   };
 }
 
@@ -34,15 +36,30 @@ export class AuthService {
   async login(input) {
     const email = String(input.email || '').trim().toLowerCase();
     const password = String(input.password || '');
+    const orgSlug = String(input.orgSlug || '').trim().toLowerCase();
 
     assert(email && password, 'Email and password are required.');
 
     return this.databaseManager.withTransaction(async (client) => {
       await deleteExpiredUserSessions(client);
 
-      const userRow = await findUserByEmail(client, email);
+      let tenant = null;
+
+      if (orgSlug) {
+        tenant = await findTenantBySlug(client, orgSlug);
+        assert(tenant, 'Organization not found. Check your organization code.', 401);
+        assert(tenant.status === 'active', 'This organization subscription is inactive. Contact support.', 403);
+      }
+
+      const tenantIdFilter = orgSlug ? tenant.id : undefined;
+      const userRow = await findUserByEmail(client, email, tenantIdFilter);
       const validPassword = userRow ? await verifyPassword(password, userRow.password_hash) : false;
       assert(userRow && userRow.status === 'active' && validPassword, 'Invalid email or password.', 401);
+
+      if (!tenant && userRow.tenant_id) {
+        tenant = await findTenantById(client, userRow.tenant_id);
+        assert(tenant?.status === 'active', 'This organization subscription is inactive. Contact support.', 403);
+      }
 
       const token = createSessionToken();
       const tokenHash = hashSessionToken(token);
@@ -56,6 +73,7 @@ export class AuthService {
       });
 
       await this.auditService.record(client, {
+        tenantId: userRow.tenant_id || null,
         userId: userRow.id,
         actionType: 'auth.login',
         entityType: 'session',
@@ -67,6 +85,7 @@ export class AuthService {
       return {
         token,
         user: mapUser(userRow),
+        tenant,
       };
     });
   }
@@ -78,7 +97,17 @@ export class AuthService {
 
     const client = await this.databaseManager.getPool().connect();
     try {
-      return await findActiveUserBySessionTokenHash(client, hashSessionToken(token));
+      const user = await findActiveUserBySessionTokenHash(client, hashSessionToken(token));
+      if (!user) {
+        return null;
+      }
+
+      let tenant = null;
+      if (user.tenantId) {
+        tenant = await findTenantById(client, user.tenantId);
+      }
+
+      return { user, tenant };
     } finally {
       client.release();
     }
@@ -92,11 +121,13 @@ export class AuthService {
     await this.databaseManager.withTransaction(async (client) => {
       await deleteExpiredUserSessions(client);
       const tokenHash = hashSessionToken(token);
-      const user = await findActiveUserBySessionTokenHash(client, tokenHash);
+      const result = await findActiveUserBySessionTokenHash(client, tokenHash);
+      const user = result?.user || result;
       await deleteUserSessionByTokenHash(client, tokenHash);
 
       if (user) {
         await this.auditService.record(client, {
+          tenantId: user.tenantId || null,
           userId: user.id,
           actionType: 'auth.logout',
           entityType: 'session',

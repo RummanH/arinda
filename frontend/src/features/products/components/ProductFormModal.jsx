@@ -13,6 +13,7 @@ export default function ProductFormModal({ product, onClose, onSave }) {
     piecesPerCase: product?.piecesPerCase || 24,
     purchasePrice: product?.purchasePrice || '',
     sellingPrice: product?.sellingPrice || '',
+    orderIndex: product?.orderIndex != null ? product.orderIndex : '',
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -45,6 +46,7 @@ export default function ProductFormModal({ product, onClose, onSave }) {
       piecesPerCase,
       purchasePrice,
       sellingPrice,
+      orderIndex: form.orderIndex === '' ? null : Number(form.orderIndex),
     });
     setSaving(false);
 
@@ -77,6 +79,10 @@ export default function ProductFormModal({ product, onClose, onSave }) {
           <div>
             <label className="label">{t('products.sellingPrice')}</label>
             <input className="input" type="number" min="0" step="0.01" value={form.sellingPrice} onChange={(event) => updateField('sellingPrice', event.target.value)} />
+          </div>
+          <div>
+            <label className="label">{t('products.orderIndex')}</label>
+            <input className="input" type="number" min="0" step="1" value={form.orderIndex} onChange={(event) => updateField('orderIndex', event.target.value)} placeholder="0" />
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-2">

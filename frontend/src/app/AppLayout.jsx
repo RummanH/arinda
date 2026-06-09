@@ -9,7 +9,7 @@ import TopHeader from './TopHeader';
 export default function AppLayout() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { today, user, loading, loadError, toasts, dismissToast, logout, t, language, setLanguage, can, confirmation, closeConfirmation } = useInventoryApp();
+  const { today, user, tenant, loading, loadError, toasts, dismissToast, logout, t, language, setLanguage, can, confirmation, closeConfirmation } = useInventoryApp();
 
   if (loading) {
     return <PageLoadingState title={t('app.brand')} description={t('status.loadingData')} />;
@@ -18,9 +18,9 @@ export default function AppLayout() {
   return (
     <div className="page-shell">
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
-      <AppSidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} user={user} language={language} onLanguageChange={setLanguage} onLogout={logout} t={t} can={can} />
+      <AppSidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} user={user} tenant={tenant} language={language} onLanguageChange={setLanguage} onLogout={logout} t={t} can={can} />
       <div className="flex h-screen min-h-0 flex-col lg:pl-72">
-        <TopHeader title={getRouteLabel(location.pathname, t)} today={today} user={user} language={language} onLanguageChange={setLanguage} onLogout={logout} onOpenMenu={() => setMobileOpen(true)} t={t} />
+        <TopHeader title={getRouteLabel(location.pathname, t)} today={today} user={user} onLogout={logout} onOpenMenu={() => setMobileOpen(true)} t={t} />
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
           <main className="relative z-10 mx-auto max-w-[1680px] px-3 py-6 pb-10 sm:px-6 lg:px-8">
             {loadError ? (

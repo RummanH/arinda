@@ -5,7 +5,7 @@ export class ActivityLogController {
 
   list = async (req, res, next) => {
     try {
-      res.json(await this.auditService.list(req.query));
+      res.json(await this.auditService.list(req.query, req.currentUser.tenantId));
     } catch (error) {
       next(error);
     }

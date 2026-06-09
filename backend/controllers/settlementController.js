@@ -5,7 +5,7 @@ export class SettlementController {
 
   list = async (req, res, next) => {
     try {
-      res.json(await this.inventoryService.listSettlements(req.query));
+      res.json(await this.inventoryService.listSettlements(req.query, req.currentUser));
     } catch (error) {
       next(error);
     }

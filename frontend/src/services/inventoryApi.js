@@ -44,8 +44,8 @@ export const inventoryApi = {
     return apiRequest("/auth/me");
   },
 
-  login(credentials) {
-    return apiRequest("/auth/login", { method: "POST", body: JSON.stringify(credentials) });
+  login({ email, password, orgSlug }) {
+    return apiRequest("/auth/login", { method: "POST", body: JSON.stringify({ email, password, orgSlug }) });
   },
 
   logout() {
@@ -212,6 +212,27 @@ export const inventoryApi = {
 
   addProductStock(productId, addPieces) {
     return apiRequest(`/products/${productId}/stock`, { method: "POST", body: JSON.stringify({ addPieces }) });
+  },
+
+  // Platform admin endpoints
+  listTenants() {
+    return apiRequest("/platform/tenants");
+  },
+
+  createTenant(tenant) {
+    return apiRequest("/platform/tenants", { method: "POST", body: JSON.stringify(tenant) });
+  },
+
+  updateTenant(tenantId, fields) {
+    return apiRequest(`/platform/tenants/${tenantId}`, { method: "PATCH", body: JSON.stringify(fields) });
+  },
+
+  setTenantStatus(tenantId, status) {
+    return apiRequest(`/platform/tenants/${tenantId}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+  },
+
+  updateOrgSettings(fields) {
+    return apiRequest("/org", { method: "PATCH", body: JSON.stringify(fields) });
   },
 
   createDsr(dsr) {

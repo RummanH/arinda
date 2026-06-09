@@ -5,7 +5,7 @@ import { getCssVar } from '../../../utils/theme.js';
 
 const DAY_SCOPE_PAGE_SIZE = 100;
 
-export function useDailyReportsViewModel({ products, dsrs, today, t }) {
+export function useDailyReportsViewModel({ products, dsrs, today, t, tenantName }) {
   const [date, setDate] = useState(today);
   const [selectedSheet, setSelectedSheet] = useState(null);
   const [dayIssues, setDayIssues] = useState([]);
@@ -91,7 +91,7 @@ export function useDailyReportsViewModel({ products, dsrs, today, t }) {
       return;
     }
 
-    setSelectedSheet(buildSheetData({ date, dsrId: row.dsrId, dsrs, issues: dayIssues, settlements: daySettlements, products }));
+    setSelectedSheet(buildSheetData({ date, dsrId: row.dsrId, dsrs, issues: dayIssues, settlements: daySettlements, products, tenantName }));
   }
 
   return {

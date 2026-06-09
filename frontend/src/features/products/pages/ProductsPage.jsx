@@ -108,7 +108,7 @@ export default function ProductsPage() {
                           <button type="button" className="icon-btn" title={t('common.edit')} onClick={() => setProductModal({ mode: 'edit', product })}>
                             <Pencil size={16} />
                           </button>
-                          <button type="button" className="icon-btn text-rose-600 hover:text-rose-700" title={t('common.delete')} onClick={() => deleteProduct(product)}>
+                          <button type="button" className="icon-btn text-rose-600 hover:text-rose-700" title={t('common.delete')} onClick={async () => { const r = await deleteProduct(product); if (r.ok) vm.reload(); }}>
                             <Trash2 size={16} />
                           </button>
                         </>
@@ -139,6 +139,7 @@ export default function ProductsPage() {
         const result = await saveProduct(value);
         if (result.ok) {
           setProductModal(null);
+          vm.reload();
         }
         return result;
       }} /> : null}
@@ -146,6 +147,7 @@ export default function ProductsPage() {
         const result = await addStock(productId, addPieces);
         if (result.ok) {
           setStockModalProduct(null);
+          vm.reload();
         }
         return result;
       }} /> : null}

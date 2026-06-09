@@ -18,30 +18,14 @@ function mapActivityLog(row) {
   };
 }
 
-function buildActivityLogSearchClause(search, params) {
-  if (!search) {
-    return '';
-  }
-
-  params.push(`%${search}%`);
-  const index = params.length;
-  return `WHERE (
-    users.name ILIKE $${index}
-    OR users.email ILIKE $${index}
-    OR activity_logs.action_type ILIKE $${index}
-    OR activity_logs.entity_type ILIKE $${index}
-    OR activity_logs.entity_id ILIKE $${index}
-    OR activity_logs.description ILIKE $${index}
-  )`;
-}
-
 export function insertActivityLog(client, log) {
   return client.query(
     `INSERT INTO activity_logs (
-      id, user_id, action_type, entity_type, entity_id, description, metadata
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      id, tenant_id, user_id, action_type, entity_type, entity_id, description, metadata
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
       log.id,
+      log.tenantId || null,
       log.userId,
       log.actionType,
       log.entityType,
@@ -52,9 +36,29 @@ export function insertActivityLog(client, log) {
   );
 }
 
-export async function countActivityLogs(client, { search } = {}) {
+export async function countActivityLogs(client, { search, tenantId } = {}) {
   const params = [];
-  const where = buildActivityLogSearchClause(search, params);
+  const conditions = [];
+
+  if (tenantId) {
+    params.push(tenantId);
+    conditions.push(`activity_logs.tenant_id = $${params.length}`);
+  }
+
+  if (search) {
+    params.push(`%${search}%`);
+    const index = params.length;
+    conditions.push(`(
+      users.name ILIKE $${index}
+      OR users.email ILIKE $${index}
+      OR activity_logs.action_type ILIKE $${index}
+      OR activity_logs.entity_type ILIKE $${index}
+      OR activity_logs.entity_id ILIKE $${index}
+      OR activity_logs.description ILIKE $${index}
+    )`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const result = await client.query(
     `SELECT COUNT(*)::INTEGER AS count
      FROM activity_logs
@@ -65,10 +69,31 @@ export async function countActivityLogs(client, { search } = {}) {
   return result.rows[0].count;
 }
 
-export async function listActivityLogsPage(client, { search, limit, offset }) {
+export async function listActivityLogsPage(client, { search, tenantId, limit, offset }) {
   const params = [];
-  const where = buildActivityLogSearchClause(search, params);
+  const conditions = [];
+
+  if (tenantId) {
+    params.push(tenantId);
+    conditions.push(`activity_logs.tenant_id = $${params.length}`);
+  }
+
+  if (search) {
+    params.push(`%${search}%`);
+    const index = params.length;
+    conditions.push(`(
+      users.name ILIKE $${index}
+      OR users.email ILIKE $${index}
+      OR activity_logs.action_type ILIKE $${index}
+      OR activity_logs.entity_type ILIKE $${index}
+      OR activity_logs.entity_id ILIKE $${index}
+      OR activity_logs.description ILIKE $${index}
+    )`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   params.push(limit, offset);
+
   const result = await client.query(
     `SELECT
       activity_logs.id,
@@ -92,4 +117,3 @@ export async function listActivityLogsPage(client, { search, limit, offset }) {
 
   return result.rows.map(mapActivityLog);
 }
-

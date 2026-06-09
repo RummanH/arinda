@@ -5,7 +5,7 @@ export class IssueController {
 
   list = async (req, res, next) => {
     try {
-      res.json(await this.inventoryService.listIssues(req.query));
+      res.json(await this.inventoryService.listIssues(req.query, req.currentUser));
     } catch (error) {
       next(error);
     }

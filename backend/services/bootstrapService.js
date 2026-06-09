@@ -3,8 +3,43 @@ import { createId } from '../lib/ids.js';
 import { hashPassword } from '../lib/passwords.js';
 import { USER_ROLES } from '../lib/roles.js';
 import { countUsers, insertUser } from '../repositories/userRepository.js';
+import { countTenants, insertTenant, listTenants } from '../repositories/tenantRepository.js';
 
-async function seedSuperAdminIfEmpty(pool, env) {
+const FIRST_TENANT_TABLES = [
+  'users', 'products', 'dsrs', 'issues', 'settlements',
+  'expenses', 'dsr_cash_receipts', 'dsr_advances', 'activity_logs',
+];
+
+async function ensureFirstTenant(pool, env) {
+  const tenantCount = await countTenants(pool);
+  if (tenantCount > 0) {
+    const tenants = await listTenants(pool);
+    return tenants[0];
+  }
+
+  const tenantName = env.DEFAULT_TENANT_NAME || 'Arinda Enterprise';
+  const tenantSlug = env.DEFAULT_TENANT_SLUG || 'arinda';
+
+  return await insertTenant(pool, {
+    id: createId('tenant'),
+    name: tenantName,
+    slug: tenantSlug,
+    email: env.DEFAULT_SUPER_ADMIN_EMAIL,
+    plan: 'starter',
+    status: 'active',
+  });
+}
+
+async function backfillTenantId(pool, tenantId) {
+  for (const table of FIRST_TENANT_TABLES) {
+    await pool.query(
+      `UPDATE ${table} SET tenant_id = $1 WHERE tenant_id IS NULL`,
+      [tenantId],
+    );
+  }
+}
+
+async function seedSuperAdminIfEmpty(pool, env, tenantId) {
   const userCount = await countUsers(pool);
   if (userCount > 0) {
     return;
@@ -17,6 +52,7 @@ async function seedSuperAdminIfEmpty(pool, env) {
     passwordHash: await hashPassword(env.DEFAULT_SUPER_ADMIN_PASSWORD),
     role: USER_ROLES.SUPER_ADMIN,
     status: 'active',
+    tenantId,
   });
 }
 
@@ -34,5 +70,7 @@ export async function initializeDatabase(databaseManager, env) {
 
   const pool = databaseManager.getPool();
 
-  await seedSuperAdminIfEmpty(pool, env);
+  const firstTenant = await ensureFirstTenant(pool, env);
+  await backfillTenantId(pool, firstTenant.id);
+  await seedSuperAdminIfEmpty(pool, env, firstTenant.id);
 }

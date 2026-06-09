@@ -1,4 +1,5 @@
 export const USER_ROLES = {
+  PLATFORM_ADMIN: 'platform_admin',
   SUPER_ADMIN: 'super_admin',
   ADMIN: 'admin',
   MANAGER: 'manager',
@@ -6,3 +7,9 @@ export const USER_ROLES = {
 };
 
 export const USER_ROLE_VALUES = Object.values(USER_ROLES);
+export const TENANT_ROLE_VALUES = [
+  USER_ROLES.SUPER_ADMIN,
+  USER_ROLES.ADMIN,
+  USER_ROLES.MANAGER,
+  USER_ROLES.OPERATOR,
+];

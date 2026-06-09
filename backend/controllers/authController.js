@@ -18,16 +18,16 @@ export class AuthController {
 
   login = async (req, res, next) => {
     try {
-      const { token, user } = await this.authService.login(req.body);
+      const { token, user, tenant } = await this.authService.login(req.body);
       res.cookie(this.env.SESSION_COOKIE_NAME, token, createCookieOptions(this.env));
-      res.json({ user });
+      res.json({ user, tenant });
     } catch (error) {
       next(error);
     }
   };
 
   me = async (req, res) => {
-    res.json({ user: req.currentUser });
+    res.json({ user: req.currentUser, tenant: req.currentTenant });
   };
 
   logout = async (req, res, next) => {

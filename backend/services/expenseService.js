@@ -48,7 +48,7 @@ export class ExpenseService {
     this.auditService = auditService;
   }
 
-  async getExpenseReport({ date, month }) {
+  async getExpenseReport({ date, month }, actor) {
     const selectedDate = normalizeIsoDate(date, new Date().toISOString().slice(0, 10), EXPENSE_DATE_ERROR);
     const selectedMonth = normalizeIsoMonth(month, selectedDate.slice(0, 7));
     const monthStart = startOfMonth(selectedMonth);
@@ -56,7 +56,7 @@ export class ExpenseService {
 
     const client = await this.databaseManager.getPool().connect();
     try {
-      const monthlyExpenses = await listExpensesInRange(client, monthStart, nextMonthStart);
+      const monthlyExpenses = await listExpensesInRange(client, monthStart, nextMonthStart, actor.tenantId);
       const dailyExpenses = monthlyExpenses.filter((expense) => expense.date === selectedDate);
 
       return {
@@ -79,11 +79,12 @@ export class ExpenseService {
 
     return this.databaseManager.withTransaction(async (client) => {
       if (input.id) {
-        const existingExpense = await findExpenseById(client, expense.id);
+        const existingExpense = await findExpenseById(client, expense.id, actor.tenantId);
         assert(existingExpense, 'Expense not found.', 404);
 
-        await updateExpense(client, expense);
+        await updateExpense(client, expense, actor.tenantId);
         await this.auditService.record(client, {
+          tenantId: actor.tenantId,
           userId: actor.id,
           actionType: 'expense.update',
           entityType: 'expense',
@@ -93,8 +94,10 @@ export class ExpenseService {
         });
       } else {
         expense.createdBy = actor.id;
+        expense.tenantId = actor.tenantId;
         await insertExpense(client, expense);
         await this.auditService.record(client, {
+          tenantId: actor.tenantId,
           userId: actor.id,
           actionType: 'expense.create',
           entityType: 'expense',
@@ -110,12 +113,13 @@ export class ExpenseService {
 
   async removeExpense(expenseId, actor) {
     return this.databaseManager.withTransaction(async (client) => {
-      const existingExpense = await findExpenseById(client, expenseId);
+      const existingExpense = await findExpenseById(client, expenseId, actor.tenantId);
       assert(existingExpense, 'Expense not found.', 404);
-      const result = await deleteExpense(client, expenseId);
+      const result = await deleteExpense(client, expenseId, actor.tenantId);
       assert(result.rowCount > 0, 'Expense not found.', 404);
 
       await this.auditService.record(client, {
+        tenantId: actor.tenantId,
         userId: actor.id,
         actionType: 'expense.delete',
         entityType: 'expense',

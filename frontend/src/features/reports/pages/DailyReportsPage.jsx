@@ -9,8 +9,8 @@ import { useDailyReportsViewModel } from '../viewmodels/useDailyReportsViewModel
 import { getCssVar } from '../../../utils/theme.js';
 
 export default function DailyReportsPage() {
-  const { productDirectory, dsrDirectory, today, t } = useInventoryApp();
-  const vm = useDailyReportsViewModel({ products: productDirectory, dsrs: dsrDirectory, today, t });
+  const { productDirectory, dsrDirectory, today, t, tenant } = useInventoryApp();
+  const vm = useDailyReportsViewModel({ products: productDirectory, dsrs: dsrDirectory, today, t, tenantName: tenant?.name });
 
   return (
     <div>

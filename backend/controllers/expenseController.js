@@ -5,7 +5,7 @@ export class ExpenseController {
 
   report = async (req, res, next) => {
     try {
-      const report = await this.expenseService.getExpenseReport(req.query);
+      const report = await this.expenseService.getExpenseReport(req.query, req.currentUser);
       res.json(report);
     } catch (error) {
       next(error);

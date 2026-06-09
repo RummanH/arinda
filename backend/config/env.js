@@ -16,6 +16,8 @@ export const env = {
   DEFAULT_SUPER_ADMIN_EMAIL: process.env.DEFAULT_SUPER_ADMIN_EMAIL || 'admin@arinda.local',
   DEFAULT_SUPER_ADMIN_NAME: process.env.DEFAULT_SUPER_ADMIN_NAME || 'Super Admin',
   DEFAULT_SUPER_ADMIN_PASSWORD: process.env.DEFAULT_SUPER_ADMIN_PASSWORD || 'Admin@12345',
+  DEFAULT_TENANT_NAME: process.env.DEFAULT_TENANT_NAME || 'Arinda Enterprise',
+  DEFAULT_TENANT_SLUG: process.env.DEFAULT_TENANT_SLUG || 'arinda',
   NODE_ENV,
   PORT,
   SESSION_COOKIE_NAME: process.env.SESSION_COOKIE_NAME || 'arinda_session',

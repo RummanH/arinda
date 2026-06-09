@@ -43,6 +43,7 @@ export function InventoryAppProvider({ children }) {
   const today = todayISO();
   const [language, setLanguageState] = useState(getInitialLanguage);
   const [user, setUser] = useState(null);
+  const [tenant, setTenant] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [productDirectory, setProductDirectory] = useState([]);
   const [dsrDirectory, setDsrDirectory] = useState([]);
@@ -115,7 +116,12 @@ export function InventoryAppProvider({ children }) {
       const next = current.some((item) => item.id === product.id)
         ? current.map((item) => (item.id === product.id ? product : item))
         : [...current, product];
-      return next.sort((a, b) => a.name.localeCompare(b.name));
+      return next.sort((a, b) => {
+        const aOrder = a.orderIndex ?? 9999;
+        const bOrder = b.orderIndex ?? 9999;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return a.name.localeCompare(b.name);
+      });
     });
   }
 
@@ -152,6 +158,7 @@ export function InventoryAppProvider({ children }) {
 
   function handleUnauthorized() {
     setUser(null);
+    setTenant(null);
     resetInventoryState();
     setLoadError('');
     setLoading(false);
@@ -193,7 +200,12 @@ export function InventoryAppProvider({ children }) {
         }
 
         setUser(result.user);
-        await refreshState();
+        setTenant(result.tenant || null);
+        if (result.user.role !== 'platform_admin') {
+          await refreshState();
+        } else {
+          setLoading(false);
+        }
       } catch (error) {
         if (cancelled) {
           return;
@@ -347,7 +359,10 @@ export function InventoryAppProvider({ children }) {
     try {
       const result = await inventoryApi.login(credentials);
       setUser(result.user);
-      await refreshState();
+      setTenant(result.tenant || null);
+      if (result.user.role !== 'platform_admin') {
+        await refreshState();
+      }
       pushToast('success', t('alerts.loggedIn'), result.user.name);
       return { ok: true };
     } catch (error) {
@@ -377,6 +392,7 @@ export function InventoryAppProvider({ children }) {
       t,
       can: (permission) => hasPermission(user?.role, permission),
       user,
+      tenant,
       authLoading,
       productDirectory,
       dsrDirectory,
@@ -397,7 +413,7 @@ export function InventoryAppProvider({ children }) {
       saveIssue,
       saveSettlement,
     }),
-    [today, language, t, user, authLoading, productDirectory, dsrDirectory, loading, loadError, toasts, confirmation],
+    [today, language, t, user, tenant, authLoading, productDirectory, dsrDirectory, loading, loadError, toasts, confirmation],
   );
 
   return <InventoryAppContext.Provider value={value}>{children}</InventoryAppContext.Provider>;

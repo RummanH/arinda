@@ -1,7 +1,7 @@
 import { assert } from '../lib/errors.js';
 import { createId } from '../lib/ids.js';
 import { hashPassword } from '../lib/passwords.js';
-import { USER_ROLES, USER_ROLE_VALUES } from '../lib/roles.js';
+import { USER_ROLES, TENANT_ROLE_VALUES } from '../lib/roles.js';
 import { findUserByEmail, findUserById, insertUser, listUsers as listUsersRepo, updateUser as updateUserRepo } from '../repositories/userRepository.js';
 
 function normalizeEmail(email) {
@@ -14,7 +14,7 @@ function normalizeName(name) {
 
 function normalizeRole(role) {
   const value = String(role || '').trim();
-  assert(USER_ROLE_VALUES.includes(value), 'Invalid role.');
+  assert(TENANT_ROLE_VALUES.includes(value), 'Invalid role.');
   return value;
 }
 
@@ -30,10 +30,10 @@ export class UserService {
     this.auditService = auditService;
   }
 
-  async listUsers() {
+  async listUsers(actor) {
     const client = await this.databaseManager.getPool().connect();
     try {
-      return await listUsersRepo(client);
+      return await listUsersRepo(client, actor.tenantId);
     } finally {
       client.release();
     }
@@ -49,7 +49,7 @@ export class UserService {
     assert(name && email && password, 'Name, email, and password are required.');
 
     await this.databaseManager.withTransaction(async (client) => {
-      const existingUser = await findUserByEmail(client, email);
+      const existingUser = await findUserByEmail(client, email, actor.tenantId);
       assert(!existingUser, 'A user with this email already exists.');
 
       const user = {
@@ -59,10 +59,12 @@ export class UserService {
         passwordHash: await hashPassword(password),
         role,
         status,
+        tenantId: actor.tenantId,
       };
 
       await insertUser(client, user);
       await this.auditService.record(client, {
+        tenantId: actor.tenantId,
         userId: actor.id,
         actionType: 'user.create',
         entityType: 'user',
@@ -72,7 +74,7 @@ export class UserService {
       });
     });
 
-    return this.listUsers();
+    return this.listUsers(actor);
   }
 
   async updateUser(userId, input, actor) {
@@ -81,6 +83,7 @@ export class UserService {
     await this.databaseManager.withTransaction(async (client) => {
       const existingUser = await findUserById(client, userId);
       assert(existingUser, 'User not found.', 404);
+      assert(existingUser.tenant_id === actor.tenantId, 'User not found.', 404);
 
       const nextName = input.name === undefined ? existingUser.name : normalizeName(input.name);
       nextEmail = input.email === undefined ? existingUser.email : normalizeEmail(input.email);
@@ -89,12 +92,13 @@ export class UserService {
       const nextPasswordHash = input.password ? await hashPassword(String(input.password)) : null;
 
       if (nextEmail !== existingUser.email) {
-        const duplicateUser = await findUserByEmail(client, nextEmail);
+        const duplicateUser = await findUserByEmail(client, nextEmail, actor.tenantId);
         assert(!duplicateUser || duplicateUser.id === userId, 'A user with this email already exists.');
       }
 
       await updateUserRepo(client, {
         id: userId,
+        tenantId: actor.tenantId,
         name: nextName,
         email: nextEmail,
         passwordHash: nextPasswordHash,
@@ -103,6 +107,7 @@ export class UserService {
       });
 
       await this.auditService.record(client, {
+        tenantId: actor.tenantId,
         userId: actor.id,
         actionType: 'user.update',
         entityType: 'user',
@@ -116,6 +121,6 @@ export class UserService {
       });
     });
 
-    return this.listUsers();
+    return this.listUsers(actor);
   }
 }

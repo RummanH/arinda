@@ -13,6 +13,7 @@ export function useProductsViewModel() {
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -54,7 +55,7 @@ export function useProductsViewModel() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debouncedSearch]);
+  }, [page, pageSize, debouncedSearch, version]);
 
   return {
     search,
@@ -67,5 +68,6 @@ export function useProductsViewModel() {
     setPage,
     loading,
     error,
+    reload: () => setVersion((v) => v + 1),
   };
 }

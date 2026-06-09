@@ -72,7 +72,7 @@ export function getDsrSnapshot(dsrs, issues, settlements, dsrId, date) {
   };
 }
 
-export function buildSheetData({ date, dsrId, dsrs, issues, settlements, products }) {
+export function buildSheetData({ date, dsrId, dsrs, issues, settlements, products, tenantName }) {
   const aggregate = aggregateIssuesFor(issues, products, date, dsrId);
   const settlement = getSettlementFor(settlements, date, dsrId);
   const dsr = getDsrSnapshot(dsrs, issues, settlements, dsrId, date);
@@ -87,7 +87,7 @@ export function buildSheetData({ date, dsrId, dsrs, issues, settlements, product
       }));
 
   return {
-    businessName: 'ARINDA ENTERPRISE',
+    businessName: tenantName || 'Arinda Enterprise',
     date,
     dsrId,
     dsrName: dsr.dsrName,

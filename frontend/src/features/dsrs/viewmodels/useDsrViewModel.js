@@ -15,6 +15,7 @@ export function useDsrViewModel({ today }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [inProgressDsrIds, setInProgressDsrIds] = useState(new Set());
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -56,7 +57,7 @@ export function useDsrViewModel({ today }) {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debouncedSearch]);
+  }, [page, pageSize, debouncedSearch, version]);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,5 +108,6 @@ export function useDsrViewModel({ today }) {
     loading,
     error,
     inProgressDsrIds,
+    reload: () => setVersion((v) => v + 1),
   };
 }

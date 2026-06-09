@@ -10,11 +10,15 @@ import { IssueController } from '../controllers/issueController.js';
 import { ProductController } from '../controllers/productController.js';
 import { UserController } from '../controllers/userController.js';
 import { SettlementController } from '../controllers/settlementController.js';
+import { TenantController } from '../controllers/tenantController.js';
+import { OrgController } from '../controllers/orgController.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { requireActiveTenant } from '../middleware/requireActiveTenant.js';
+import { requirePlatformAdmin } from '../middleware/requirePlatformAdmin.js';
 import { requirePermission } from '../middleware/requireRole.js';
 import { PERMISSIONS } from '../lib/permissions.js';
 
-export function createApiRouter({ authService, env, inventoryService, auditService, userService, expenseService, dsrFinanceService, monthEndSummaryService, backupService, databaseManager }) {
+export function createApiRouter({ authService, env, inventoryService, auditService, userService, expenseService, dsrFinanceService, monthEndSummaryService, backupService, databaseManager, tenantService }) {
   const router = Router();
   const authController = new AuthController(authService, env);
   const productController = new ProductController(inventoryService);
@@ -27,6 +31,8 @@ export function createApiRouter({ authService, env, inventoryService, auditServi
   const dsrFinanceController = new DsrFinanceController(dsrFinanceService);
   const monthEndSummaryController = new MonthEndSummaryController(monthEndSummaryService);
   const backupController = new BackupController(backupService, databaseManager);
+  const tenantController = new TenantController(tenantService);
+  const orgController = new OrgController(tenantService);
 
   router.post('/auth/login', authController.login);
   router.post('/auth/logout', authController.logout);
@@ -34,6 +40,17 @@ export function createApiRouter({ authService, env, inventoryService, auditServi
   router.use(requireAuth(authService, env));
 
   router.get('/auth/me', authController.me);
+
+  // Platform admin routes — no tenant required, platform_admin only
+  router.get('/platform/tenants', requirePlatformAdmin, tenantController.list);
+  router.post('/platform/tenants', requirePlatformAdmin, tenantController.create);
+  router.patch('/platform/tenants/:id', requirePlatformAdmin, tenantController.update);
+  router.patch('/platform/tenants/:id/status', requirePlatformAdmin, tenantController.setStatus);
+
+  // All business routes require an active tenant subscription
+  router.use(requireActiveTenant);
+
+  router.patch('/org', requirePermission(PERMISSIONS.MANAGE_ORG), orgController.update);
 
   router.get('/users', requirePermission(PERMISSIONS.MANAGE_USERS), userController.list);
   router.post('/users', requirePermission(PERMISSIONS.MANAGE_USERS), userController.create);

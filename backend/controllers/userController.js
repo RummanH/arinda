@@ -3,9 +3,9 @@ export class UserController {
     this.userService = userService;
   }
 
-  list = async (_req, res, next) => {
+  list = async (req, res, next) => {
     try {
-      res.json({ users: await this.userService.listUsers() });
+      res.json({ users: await this.userService.listUsers(req.currentUser) });
     } catch (error) {
       next(error);
     }

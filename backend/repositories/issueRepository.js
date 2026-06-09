@@ -10,8 +10,9 @@ export function mapIssue(row) {
   };
 }
 
-function buildIssueFilterClause({ dsrId, dateFrom, dateTo, search }, params) {
-  const conditions = [];
+function buildIssueFilterClause({ tenantId, dsrId, dateFrom, dateTo, search }, params) {
+  params.push(tenantId);
+  const conditions = [`tenant_id = $${params.length}`];
 
   if (dsrId) {
     params.push(dsrId);
@@ -30,7 +31,7 @@ function buildIssueFilterClause({ dsrId, dateFrom, dateTo, search }, params) {
     conditions.push(`(dsr_name ILIKE $${params.length} OR area ILIKE $${params.length})`);
   }
 
-  return conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  return `WHERE ${conditions.join(' AND ')}`;
 }
 
 export async function countIssues(client, filters = {}) {
@@ -40,9 +41,9 @@ export async function countIssues(client, filters = {}) {
   return result.rows[0].count;
 }
 
-export async function listIssuesPage(client, { dsrId, dateFrom, dateTo, search, limit, offset }) {
+export async function listIssuesPage(client, { tenantId, dsrId, dateFrom, dateTo, search, limit, offset }) {
   const params = [];
-  const where = buildIssueFilterClause({ dsrId, dateFrom, dateTo, search }, params);
+  const where = buildIssueFilterClause({ tenantId, dsrId, dateFrom, dateTo, search }, params);
   params.push(limit, offset);
   const result = await client.query(
     `SELECT * FROM issues ${where} ORDER BY issue_date DESC, created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
@@ -53,34 +54,37 @@ export async function listIssuesPage(client, { dsrId, dateFrom, dateTo, search, 
 
 export function insertIssue(client, issue) {
   return client.query(
-    `INSERT INTO issues (id, issue_date, dsr_id, dsr_name, area, phone, items)
-     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+    `INSERT INTO issues (id, tenant_id, issue_date, dsr_id, dsr_name, area, phone, items)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
      RETURNING *`,
-    [issue.id, issue.date, issue.dsrId, issue.dsrName, issue.area, issue.phone, JSON.stringify(issue.items)],
+    [issue.id, issue.tenantId, issue.date, issue.dsrId, issue.dsrName, issue.area, issue.phone, JSON.stringify(issue.items)],
   );
 }
 
 export function updateIssue(client, issue) {
   return client.query(
     `UPDATE issues
-     SET issue_date = $2, dsr_id = $3, dsr_name = $4, area = $5, phone = $6, items = $7::jsonb
-     WHERE id = $1
+     SET issue_date = $3, dsr_id = $4, dsr_name = $5, area = $6, phone = $7, items = $8::jsonb
+     WHERE id = $1 AND tenant_id = $2
      RETURNING *`,
-    [issue.id, issue.date, issue.dsrId, issue.dsrName, issue.area, issue.phone, JSON.stringify(issue.items)],
+    [issue.id, issue.tenantId, issue.date, issue.dsrId, issue.dsrName, issue.area, issue.phone, JSON.stringify(issue.items)],
   );
 }
 
-export function findIssueById(client, issueId) {
-  return client.query('SELECT * FROM issues WHERE id = $1 LIMIT 1', [issueId]);
+export function findIssueById(client, issueId, tenantId) {
+  return client.query('SELECT * FROM issues WHERE id = $1 AND tenant_id = $2 LIMIT 1', [issueId, tenantId]);
 }
 
-export function findIssueByDateAndDsr(client, date, dsrId) {
-  return client.query('SELECT * FROM issues WHERE issue_date = $1 AND dsr_id = $2 LIMIT 1', [date, dsrId]);
-}
-
-export function findDuplicateIssue(client, date, dsrId, issueId) {
+export function findIssueByDateAndDsr(client, date, dsrId, tenantId) {
   return client.query(
-    'SELECT id FROM issues WHERE issue_date = $1 AND dsr_id = $2 AND id <> $3 LIMIT 1',
-    [date, dsrId, issueId],
+    'SELECT * FROM issues WHERE issue_date = $1 AND dsr_id = $2 AND tenant_id = $3 LIMIT 1',
+    [date, dsrId, tenantId],
+  );
+}
+
+export function findDuplicateIssue(client, date, dsrId, issueId, tenantId) {
+  return client.query(
+    'SELECT id FROM issues WHERE issue_date = $1 AND dsr_id = $2 AND id <> $3 AND tenant_id = $4 LIMIT 1',
+    [date, dsrId, issueId, tenantId],
   );
 }

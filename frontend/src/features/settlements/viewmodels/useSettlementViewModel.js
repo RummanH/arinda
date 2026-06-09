@@ -18,7 +18,7 @@ function toExtraReturnRow(item) {
   };
 }
 
-export function useSettlementViewModel({ products, dsrs, today, saveSettlementAction, t }) {
+export function useSettlementViewModel({ products, dsrs, today, saveSettlementAction, t, tenantName }) {
   const activeDsrs = useMemo(() => dsrs.filter((dsr) => dsr.status === 'Active'), [dsrs]);
   const [date, setDate] = useState(today);
   const [dsrId, setDsrId] = useState(activeDsrs[0]?.id || '');
@@ -132,7 +132,7 @@ export function useSettlementViewModel({ products, dsrs, today, saveSettlementAc
   const dueAmount = Math.max(receivableTotal - amountPaid, 0);
   const todayDue = Math.max(0, totalPayable - discount - extraReturnValue - amountPaid);
   const hasInvalidReturns = displayRows.some((row) => row.invalid);
-  const sheet = buildSheetData({ date, dsrId, dsrs, issues: scopedIssues, settlements: scopedSettlements, products });
+  const sheet = buildSheetData({ date, dsrId, dsrs, issues: scopedIssues, settlements: scopedSettlements, products, tenantName });
 
   function updateReturn(rowKey, field, value) {
     setReturns((current) => ({

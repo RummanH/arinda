@@ -21,6 +21,7 @@ function SessionLoadingScreen() {
 
 function AuthenticatedRoutes() {
   const { authLoading, user, can } = useInventoryApp();
+  const defaultRoute = user?.role === 'platform_admin' ? '/platform' : '/dashboard';
 
   if (authLoading) {
     return <SessionLoadingScreen />;
@@ -33,22 +34,19 @@ function AuthenticatedRoutes() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route index element={<Navigate to={defaultRoute} replace />} />
         {APP_ROUTES.map((route) => {
           const RouteComponent = route.component;
+          const blocked = (route.permission && !can(route.permission)) || (route.role && user?.role !== route.role);
           return (
             <Route
               key={route.id}
               path={route.path}
-              element={
-                route.permission && !can(route.permission)
-                  ? <Navigate to="/dashboard" replace />
-                  : <RouteComponent />
-              }
+              element={blocked ? <Navigate to={defaultRoute} replace /> : <RouteComponent />}
             />
           );
         })}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to={defaultRoute} replace />} />
       </Route>
     </Routes>
   );

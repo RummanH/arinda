@@ -42,20 +42,24 @@ function buildSelect(config) {
     LEFT JOIN users ON users.id = ${config.table}.${config.ownerColumn}`;
 }
 
-export async function findRecordById(client, config, recordId) {
+export async function findRecordById(client, config, recordId, tenantId) {
   const result = await client.query(
     `${buildSelect(config)}
-     WHERE ${config.table}.id = $1
+     WHERE ${config.table}.id = $1 AND ${config.table}.tenant_id = $2
      LIMIT 1`,
-    [recordId],
+    [recordId, tenantId],
   );
 
   return mapRecord(result.rows[0]);
 }
 
-export async function listRecordsInRange(client, config, startDate, endDate, dsrId = '') {
-  const params = [startDate, endDate];
-  const conditions = [`${config.table}.${config.dateColumn} >= $1`, `${config.table}.${config.dateColumn} < $2`];
+export async function listRecordsInRange(client, config, startDate, endDate, dsrId = '', tenantId) {
+  const params = [tenantId, startDate, endDate];
+  const conditions = [
+    `${config.table}.tenant_id = $1`,
+    `${config.table}.${config.dateColumn} >= $2`,
+    `${config.table}.${config.dateColumn} < $3`,
+  ];
 
   if (dsrId) {
     params.push(dsrId);
@@ -74,26 +78,25 @@ export async function listRecordsInRange(client, config, startDate, endDate, dsr
 
 export function insertRecord(client, config, record) {
   return client.query(
-    `INSERT INTO ${config.table} (id, ${config.dateColumn}, dsr_id, amount, note, ${config.ownerColumn})
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [record.id, record.date, record.dsrId, record.amount, record.note, record.performedBy],
+    `INSERT INTO ${config.table} (id, tenant_id, ${config.dateColumn}, dsr_id, amount, note, ${config.ownerColumn})
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [record.id, record.tenantId, record.date, record.dsrId, record.amount, record.note, record.performedBy],
   );
 }
 
-export function updateRecord(client, config, record) {
+export function updateRecord(client, config, record, tenantId) {
   return client.query(
     `UPDATE ${config.table}
-     SET ${config.dateColumn} = $2,
-         dsr_id = $3,
-         amount = $4,
-         note = $5,
+     SET ${config.dateColumn} = $3,
+         dsr_id = $4,
+         amount = $5,
+         note = $6,
          updated_at = NOW()
-     WHERE id = $1`,
-    [record.id, record.date, record.dsrId, record.amount, record.note],
+     WHERE id = $1 AND tenant_id = $2`,
+    [record.id, tenantId, record.date, record.dsrId, record.amount, record.note],
   );
 }
 
-export function deleteRecord(client, config, recordId) {
-  return client.query(`DELETE FROM ${config.table} WHERE id = $1`, [recordId]);
+export function deleteRecord(client, config, recordId, tenantId) {
+  return client.query(`DELETE FROM ${config.table} WHERE id = $1 AND tenant_id = $2`, [recordId, tenantId]);
 }
-

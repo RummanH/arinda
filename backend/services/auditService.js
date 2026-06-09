@@ -7,14 +7,10 @@ export class AuditService {
     this.databaseManager = databaseManager;
   }
 
-  buildDescription(actionType, entityType, entityId, actorName, extra = '') {
-    const base = `${actorName} ${actionType} ${entityType}`;
-    return entityId ? `${base} #${entityId}${extra ? ` - ${extra}` : ''}` : `${base}${extra ? ` - ${extra}` : ''}`;
-  }
-
   async record(client, entry) {
     return insertActivityLog(client, {
       id: createId('log'),
+      tenantId: entry.tenantId || null,
       userId: entry.userId,
       actionType: entry.actionType,
       entityType: entry.entityType,
@@ -24,15 +20,15 @@ export class AuditService {
     });
   }
 
-  async list(query = {}) {
+  async list(query = {}, tenantId = null) {
     const { page, pageSize, limit, offset } = parsePagination(query);
     const search = String(query.search || '').trim();
 
     const client = await this.databaseManager.getPool().connect();
     try {
       const [items, total] = await Promise.all([
-        listActivityLogsPage(client, { search, limit, offset }),
-        countActivityLogs(client, { search }),
+        listActivityLogsPage(client, { search, tenantId, limit, offset }),
+        countActivityLogs(client, { search, tenantId }),
       ]);
 
       return buildPageResult({ items, total, page, pageSize });
@@ -41,4 +37,3 @@ export class AuditService {
     }
   }
 }
-

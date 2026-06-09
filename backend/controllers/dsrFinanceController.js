@@ -5,7 +5,7 @@ export class DsrFinanceController {
 
   cashReport = async (req, res, next) => {
     try {
-      res.json(await this.dsrFinanceService.getReport('cash', req.query));
+      res.json(await this.dsrFinanceService.getReport('cash', req.query, req.currentUser));
     } catch (error) {
       next(error);
     }
@@ -39,7 +39,7 @@ export class DsrFinanceController {
 
   advanceReport = async (req, res, next) => {
     try {
-      res.json(await this.dsrFinanceService.getReport('advance', req.query));
+      res.json(await this.dsrFinanceService.getReport('advance', req.query, req.currentUser));
     } catch (error) {
       next(error);
     }
