@@ -108,7 +108,9 @@ export function normalizeSettlement(input) {
 
   const totalPayable = items.reduce((sum, item) => sum + item.payable, 0);
   const previousDue = Math.max(0, cleanMoney(input.previousDue));
-  const receivableTotal = totalPayable + previousDue;
+  const discount = Math.max(0, cleanMoney(input.discount));
+  const extraReturnValue = Math.max(0, cleanMoney(input.extraReturnValue));
+  const receivableTotal = Math.max(0, totalPayable + previousDue - discount - extraReturnValue);
   const amountPaid = Math.min(Math.max(0, cleanMoney(input.amountPaid)), receivableTotal);
 
   return {
@@ -123,6 +125,8 @@ export function normalizeSettlement(input) {
     extraReturns,
     totalPayable,
     previousDue,
+    discount,
+    extraReturnValue,
     amountPaid,
     dueAmount: receivableTotal - amountPaid,
     status: 'Completed',

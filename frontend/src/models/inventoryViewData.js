@@ -1,4 +1,7 @@
 import { formatNumber } from '../utils/calculations';
+import { getCssVar } from '../utils/theme.js';
+
+const getSecondary = () => getCssVar('--secondary', '#2563eb');
 
 export function getSettlementFor(settlements, date, dsrId) {
   return settlements.find((settlement) => settlement.date === date && settlement.dsrId === dsrId);
@@ -95,7 +98,10 @@ export function buildSheetData({ date, dsrId, dsrs, issues, settlements, product
     extraReturns: settlement ? settlement.extraReturns || [] : [],
     totalPayable: settlement ? settlement.totalPayable : 0,
     previousDue: settlement ? settlement.previousDue || 0 : 0,
+    discount: settlement ? settlement.discount || 0 : 0,
+    extraReturnValue: settlement ? settlement.extraReturnValue || 0 : 0,
     amountPaid: settlement ? settlement.amountPaid || 0 : 0,
+    todayDue: settlement ? Math.max(0, (settlement.totalPayable || 0) - (settlement.discount || 0) - (settlement.extraReturnValue || 0) - (settlement.amountPaid || 0)) : 0,
     dueAmount: settlement ? settlement.dueAmount || 0 : 0,
   };
 }
@@ -166,11 +172,39 @@ export function buildTradingTrend({ issues, settlements, today, limit = 7 }) {
     });
 }
 
+function isoSubtractDays(dateISO, days) {
+  const date = new Date(`${dateISO}T00:00:00`);
+  date.setDate(date.getDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
+export function buildActivityHeatmap({ issues, settlements, today, days = 70 }) {
+  if (!today) return [];
+
+  const issuedCounts = new Map();
+  const settledCounts = new Map();
+  issues.forEach((issue) => issuedCounts.set(issue.date, (issuedCounts.get(issue.date) || 0) + 1));
+  settlements.forEach((settlement) => settledCounts.set(settlement.date, (settledCounts.get(settlement.date) || 0) + 1));
+
+  const cells = [];
+  let max = 0;
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const date = isoSubtractDays(today, offset);
+    const issued = issuedCounts.get(date) || 0;
+    const settled = settledCounts.get(date) || 0;
+    const count = issued + settled;
+    max = Math.max(max, count);
+    cells.push({ date, issued, settled, count, weekday: new Date(`${date}T00:00:00`).getDay() });
+  }
+
+  return cells.map((cell) => ({ ...cell, intensity: max ? cell.count / max : 0 }));
+}
+
 export function buildCategoryInventory(products) {
   return Array.from(
     products.reduce((map, product) => {
       const key = product.category || 'Uncategorized';
-      const current = map.get(key) || { label: key, value: 0, units: 0, color: 'linear-gradient(90deg,#0f766e,#2563eb)' };
+      const current = map.get(key) || { label: key, value: 0, units: 0, color: `linear-gradient(90deg, ${getCssVar('--success', '#0f766e')}, ${getCssVar('--secondary', '#2563eb')})` };
       current.value += Number(product.stockPieces || 0) * Number(product.purchasePrice || 0);
       current.units += Number(product.stockPieces || 0);
       map.set(key, current);
@@ -180,7 +214,7 @@ export function buildCategoryInventory(products) {
     .sort((a, b) => b.value - a.value)
     .map((item, index) => ({
       ...item,
-      color: ['#2563eb', '#0f766e', '#f97316', '#7c3aed', '#dc2626', '#0891b2'][index % 6],
+      color: [getCssVar('--secondary', '#2563eb'), getCssVar('--success', '#0f766e'), getCssVar('--accent-orange', '#f97316'), getCssVar('--purple', '#7c3aed'), getCssVar('--danger', '#dc2626'), getCssVar('--teal', '#0891b2')][index % 6],
       meta: `${formatNumber(item.units)} pcs in stock`,
     }));
 }
@@ -218,7 +252,7 @@ export function buildTopPayableProducts(settlements) {
     .map((item, index) => ({
       ...item,
       meta: `${formatNumber(item.soldPieces)} pcs sold`,
-      color: ['#0f766e', '#2563eb', '#f97316', '#7c3aed', '#e11d48'][index % 5],
+      color: [getCssVar('--success', '#0f766e'), getCssVar('--secondary', '#2563eb'), getCssVar('--accent-orange', '#f97316'), getCssVar('--purple', '#7c3aed'), getCssVar('--rose', '#e11d48')][index % 5],
     }));
 }
 

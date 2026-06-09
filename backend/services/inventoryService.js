@@ -1,10 +1,48 @@
 import { assert } from '../lib/errors.js';
+import { parsePagination, buildPageResult } from '../lib/pagination.js';
 import { cleanInteger, normalizeDsr, normalizeIssue, normalizeProduct, normalizeSettlement } from '../lib/normalizers.js';
-import { syncDsrHistory, deleteDsr, findDsrById, insertDsr, updateDsr } from '../repositories/dsrRepository.js';
-import { findDuplicateIssue, findIssueByDateAndDsr, findIssueById, insertIssue, updateIssue } from '../repositories/issueRepository.js';
-import { addProductStock, deleteProduct, findProductForUpdate, insertProduct, updateProduct } from '../repositories/productRepository.js';
-import { readState } from '../repositories/stateRepository.js';
-import { findDuplicateSettlement, findSettlementByDateAndDsr, findSettlementById, insertSettlement, updateSettlement } from '../repositories/settlementRepository.js';
+import {
+  syncDsrHistory,
+  countDsrs,
+  deleteDsr,
+  findDsrById,
+  insertDsr,
+  listAllActiveDsrsLite,
+  listDsrsPage,
+  mapDsr,
+  updateDsr,
+} from '../repositories/dsrRepository.js';
+import {
+  countIssues,
+  findDuplicateIssue,
+  findIssueByDateAndDsr,
+  findIssueById,
+  insertIssue,
+  listIssuesPage,
+  mapIssue,
+  updateIssue,
+} from '../repositories/issueRepository.js';
+import {
+  addProductStock,
+  countProducts,
+  deleteProduct,
+  findProductForUpdate,
+  insertProduct,
+  listAllActiveProductsLite,
+  listProductsPage,
+  mapProduct,
+  updateProduct,
+} from '../repositories/productRepository.js';
+import {
+  countSettlements,
+  findDuplicateSettlement,
+  findSettlementByDateAndDsr,
+  findSettlementById,
+  insertSettlement,
+  listSettlementsPage,
+  mapSettlement,
+  updateSettlement,
+} from '../repositories/settlementRepository.js';
 
 function sumPiecesByProduct(items, field) {
   return items.reduce((map, item) => {
@@ -134,10 +172,97 @@ export class InventoryService {
     });
   }
 
-  async getState() {
+  async listProducts(query = {}) {
+    const { page, pageSize, limit, offset } = parsePagination(query);
+    const search = String(query.search || '').trim();
+
     const client = await this.databaseManager.getPool().connect();
     try {
-      return await readState(client);
+      const [items, total] = await Promise.all([
+        listProductsPage(client, { search, limit, offset }),
+        countProducts(client, { search }),
+      ]);
+
+      return buildPageResult({ items, total, page, pageSize });
+    } finally {
+      client.release();
+    }
+  }
+
+  async getProductsDirectory() {
+    const client = await this.databaseManager.getPool().connect();
+    try {
+      return { products: await listAllActiveProductsLite(client) };
+    } finally {
+      client.release();
+    }
+  }
+
+  async listDsrs(query = {}) {
+    const { page, pageSize, limit, offset } = parsePagination(query);
+    const search = String(query.search || '').trim();
+
+    const client = await this.databaseManager.getPool().connect();
+    try {
+      const [items, total] = await Promise.all([
+        listDsrsPage(client, { search, limit, offset }),
+        countDsrs(client, { search }),
+      ]);
+
+      return buildPageResult({ items, total, page, pageSize });
+    } finally {
+      client.release();
+    }
+  }
+
+  async getDsrsDirectory() {
+    const client = await this.databaseManager.getPool().connect();
+    try {
+      return { dsrs: await listAllActiveDsrsLite(client) };
+    } finally {
+      client.release();
+    }
+  }
+
+  async listIssues(query = {}) {
+    const { page, pageSize, limit, offset } = parsePagination(query);
+    const filters = {
+      dsrId: String(query.dsrId || '').trim() || undefined,
+      dateFrom: String(query.dateFrom || '').trim() || undefined,
+      dateTo: String(query.dateTo || '').trim() || undefined,
+      search: String(query.search || '').trim() || undefined,
+    };
+
+    const client = await this.databaseManager.getPool().connect();
+    try {
+      const [items, total] = await Promise.all([
+        listIssuesPage(client, { ...filters, limit, offset }),
+        countIssues(client, filters),
+      ]);
+
+      return buildPageResult({ items, total, page, pageSize });
+    } finally {
+      client.release();
+    }
+  }
+
+  async listSettlements(query = {}) {
+    const { page, pageSize, limit, offset } = parsePagination(query);
+    const filters = {
+      dsrId: String(query.dsrId || '').trim() || undefined,
+      dateFrom: String(query.dateFrom || '').trim() || undefined,
+      dateTo: String(query.dateTo || '').trim() || undefined,
+      search: String(query.search || '').trim() || undefined,
+    };
+
+    const client = await this.databaseManager.getPool().connect();
+    try {
+      const [items, total] = await Promise.all([
+        listSettlementsPage(client, { ...filters, limit, offset }),
+        countSettlements(client, filters),
+      ]);
+
+      return buildPageResult({ items, total, page, pageSize });
     } finally {
       client.release();
     }
@@ -150,6 +275,8 @@ export class InventoryService {
     assert(product.purchasePrice > 0 && product.sellingPrice > 0, 'Purchase price and selling price must be greater than zero.');
 
     return this.databaseManager.withTransaction(async (client) => {
+      let result;
+
       if (input.id) {
         const existingResult = await findProductForUpdate(client, product.id);
         assert(existingResult.rowCount > 0, 'Product not found.', 404);
@@ -161,7 +288,7 @@ export class InventoryService {
           stockPieces: Number(existingProduct.stock_pieces),
         };
 
-        const result = await updateProduct(client, nextProduct);
+        result = await updateProduct(client, nextProduct);
         assert(result.rowCount > 0, 'Product not found.', 404);
         await this.recordActivity(client, actor, {
           actionType: 'product.update',
@@ -173,7 +300,7 @@ export class InventoryService {
       } else {
         assert(!Object.prototype.hasOwnProperty.call(input, 'stockPieces'), 'Stock can only be changed through Add Stock.');
         product.stockPieces = 0;
-        await insertProduct(client, product);
+        result = await insertProduct(client, product);
         await this.recordActivity(client, actor, {
           actionType: 'product.create',
           entityType: 'product',
@@ -183,7 +310,7 @@ export class InventoryService {
         });
       }
 
-      return readState(client);
+      return mapProduct(result.rows[0]);
     });
   }
 
@@ -197,7 +324,7 @@ export class InventoryService {
         entityId: productId,
         description: `${actor.name} deleted product ${productId}`,
       });
-      return readState(client);
+      return { ok: true };
     });
   }
 
@@ -215,7 +342,7 @@ export class InventoryService {
         description: `${actor.name} added stock to product ${productId}`,
         metadata: { addPieces },
       });
-      return readState(client);
+      return mapProduct(result.rows[0]);
     });
   }
 
@@ -224,8 +351,10 @@ export class InventoryService {
     assert(dsr.name && dsr.phone && dsr.area, 'Name, phone, and area are required.');
 
     return this.databaseManager.withTransaction(async (client) => {
+      let result;
+
       if (input.id) {
-        const result = await updateDsr(client, dsr);
+        result = await updateDsr(client, dsr);
         assert(result.rowCount > 0, 'DSR not found.', 404);
         await syncDsrHistory(client, dsr);
         await this.recordActivity(client, actor, {
@@ -236,7 +365,7 @@ export class InventoryService {
           metadata: { name: dsr.name, status: dsr.status, area: dsr.area },
         });
       } else {
-        await insertDsr(client, dsr);
+        result = await insertDsr(client, dsr);
         await this.recordActivity(client, actor, {
           actionType: 'dsr.create',
           entityType: 'dsr',
@@ -246,7 +375,7 @@ export class InventoryService {
         });
       }
 
-      return readState(client);
+      return mapDsr(result.rows[0]);
     });
   }
 
@@ -260,7 +389,7 @@ export class InventoryService {
         entityId: dsrId,
         description: `${actor.name} deleted DSR ${dsrId}`,
       });
-      return readState(client);
+      return { ok: true };
     });
   }
 
@@ -298,7 +427,9 @@ export class InventoryService {
         assert(dsrResult.rowCount > 0, 'Select a valid DSR.');
 
         await applyIssueInventoryDelta(client, previousItems, issue.items);
-        await updateIssue(client, issue);
+        const issueResult = await updateIssue(client, issue);
+
+        let settlement = null;
 
         if (targetSettlementCheck.rowCount > 0) {
           const existingSettlement = targetSettlementCheck.rows[0];
@@ -313,7 +444,7 @@ export class InventoryService {
 
           await applySettlementInventoryDelta(client, existingReturnItems, [...nextSettlementItems, ...nextExtraReturns]);
 
-          await updateSettlement(client, {
+          const settlementResult = await updateSettlement(client, {
             id: existingSettlement.id,
             date: issue.date,
             dsrId: issue.dsrId,
@@ -325,10 +456,13 @@ export class InventoryService {
             extraReturns: nextExtraReturns,
             totalPayable: nextTotalPayable,
             previousDue: Number(existingSettlement.previous_due || 0),
+            discount: Number(existingSettlement.discount || 0),
+            extraReturnValue: Number(existingSettlement.extra_return_value || 0),
             amountPaid: Number(existingSettlement.amount_paid || 0),
             dueAmount: Number(existingSettlement.due_amount || 0),
             status: existingSettlement.status,
           });
+          settlement = mapSettlement(settlementResult.rows[0]);
         }
 
         await this.recordActivity(client, actor, {
@@ -339,7 +473,7 @@ export class InventoryService {
           metadata: { date: issue.date, dsrId: issue.dsrId, items: issue.items.length },
         });
 
-        return readState(client);
+        return { issue: mapIssue(issueResult.rows[0]), settlement };
       }
 
       const settlementResult = await findSettlementByDateAndDsr(client, issue.date, issue.dsrId);
@@ -352,7 +486,7 @@ export class InventoryService {
       assert(existingIssue.rowCount === 0, 'Morning issue already exists for this DSR and date. Edit that issue instead.');
 
       await applyIssueInventoryDelta(client, [], issue.items);
-      await insertIssue(client, issue);
+      const issueResult = await insertIssue(client, issue);
       await this.recordActivity(client, actor, {
         actionType: 'issue.create',
         entityType: 'issue',
@@ -361,7 +495,7 @@ export class InventoryService {
         metadata: { date: issue.date, dsrId: issue.dsrId, items: issue.items.length },
       });
 
-      return readState(client);
+      return { issue: mapIssue(issueResult.rows[0]), settlement: null };
     });
   }
 
@@ -390,7 +524,7 @@ export class InventoryService {
       assert(dsrResult.rowCount > 0, 'Select a valid DSR.');
 
       await applyIssueInventoryDelta(client, previousItems, issue.items);
-      await updateIssue(client, issue);
+      const issueResult = await updateIssue(client, issue);
       await this.recordActivity(client, actor, {
         actionType: 'issue.update',
         entityType: 'issue',
@@ -399,7 +533,7 @@ export class InventoryService {
         metadata: { date: issue.date, dsrId: issue.dsrId, items: issue.items.length },
       });
 
-      return readState(client);
+      return mapIssue(issueResult.rows[0]);
     });
   }
 
@@ -430,7 +564,7 @@ export class InventoryService {
         const nextReturnItems = getSettlementReturnItems(settlement);
 
         await applySettlementInventoryDelta(client, previousReturnItems, nextReturnItems);
-        await updateSettlement(client, settlement);
+        const settlementResult = await updateSettlement(client, settlement);
         await this.recordActivity(client, actor, {
           actionType: 'settlement.update',
           entityType: 'settlement',
@@ -439,7 +573,7 @@ export class InventoryService {
           metadata: { date: settlement.date, dsrId: settlement.dsrId, totalPayable: settlement.totalPayable },
         });
 
-        return readState(client);
+        return mapSettlement(settlementResult.rows[0]);
       }
 
       const existingSettlement = await findSettlementByDateAndDsr(client, settlement.date, settlement.dsrId);
@@ -453,7 +587,7 @@ export class InventoryService {
       }
 
       await applySettlementInventoryDelta(client, [], getSettlementReturnItems(settlement));
-      await insertSettlement(client, settlement);
+      const insertResult = await insertSettlement(client, settlement);
       await this.recordActivity(client, actor, {
         actionType: 'settlement.create',
         entityType: 'settlement',
@@ -462,7 +596,7 @@ export class InventoryService {
         metadata: { date: settlement.date, dsrId: settlement.dsrId, totalPayable: settlement.totalPayable },
       });
 
-      return readState(client);
+      return mapSettlement(insertResult.rows[0]);
     });
   }
 

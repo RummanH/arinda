@@ -1,14 +1,15 @@
 import { AlertTriangle, CheckCircle2, ClipboardList, Download, Plus, Printer, Trash2 } from 'lucide-react';
 import PrintableSheet from '../../../components/PrintableSheet.jsx';
 import { Alert, Badge, EmptyState, SectionHeader, cx } from '../../../components/ui.jsx';
+import { DatePickerField } from '../../../components/date-picker.jsx';
 import { useInventoryApp } from '../../../app/useInventoryApp.jsx';
 import { buildPdfFileName, downloadSheetPdf } from '../../../services/printService.js';
 import { formatCasePiece, formatCurrency, formatNumber } from '../../../utils/calculations.js';
 import { useSettlementViewModel } from '../viewmodels/useSettlementViewModel';
 
 export default function EveningSettlementPage() {
-  const { products, dsrs, issues, settlements, today, saveSettlement, t, can } = useInventoryApp();
-  const vm = useSettlementViewModel({ products, dsrs, issues, settlements, today, saveSettlementAction: saveSettlement, t });
+  const { productDirectory, dsrDirectory, today, saveSettlement, t, can } = useInventoryApp();
+  const vm = useSettlementViewModel({ products: productDirectory, dsrs: dsrDirectory, today, saveSettlementAction: saveSettlement, t });
   const canCreateSettlement = can('create_settlements');
   const canUpdateSettlement = can('update_settlements');
   const canEditSettlement = vm.completedSettlement ? canUpdateSettlement : canCreateSettlement;
@@ -18,7 +19,7 @@ export default function EveningSettlementPage() {
 
   function getExtraReturnOptions(rowId) {
     const selectedProductIds = new Set(vm.extraReturns.filter((row) => row.id !== rowId).map((row) => row.productId));
-    return products.filter((product) => !selectedProductIds.has(product.id) || vm.extraReturns.find((row) => row.id === rowId)?.productId === product.id);
+    return productDirectory.filter((product) => !selectedProductIds.has(product.id) || vm.extraReturns.find((row) => row.id === rowId)?.productId === product.id);
   }
 
   return (
@@ -29,7 +30,7 @@ export default function EveningSettlementPage() {
         <div className="grid gap-4 md:grid-cols-3">
           <div>
             <label className="label">{t('common.date')}</label>
-            <input className="input" type="date" value={vm.date} onChange={(event) => vm.setDate(event.target.value)} />
+            <DatePickerField value={vm.date} onChange={vm.setDate} />
           </div>
           <div>
             <label className="label">{t('dsr.title')}</label>
@@ -62,6 +63,8 @@ export default function EveningSettlementPage() {
           <span className="muted-chip">{formatNumber(returnedPiecesTotal)} returned</span>
           <span className="muted-chip">{formatCurrency(vm.totalPayable)} payable</span>
           <span className="muted-chip">{formatNumber(vm.totalExtraReturnedPieces)} extra</span>
+          {vm.extraReturnValue > 0 ? <span className="muted-chip">-{formatCurrency(vm.extraReturnValue)} extra return</span> : null}
+          {vm.discount > 0 ? <span className="muted-chip">-{formatCurrency(vm.discount)} discount</span> : null}
         </div>
       </div>
 
@@ -119,7 +122,7 @@ export default function EveningSettlementPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <Badge tone="amber">{t('settlement.extraReturnTotal', { pieces: vm.totalExtraReturnedPieces })}</Badge>
-                  <button type="button" className="btn-secondary" onClick={vm.addExtraReturn} disabled={!products.length}>
+                  <button type="button" className="btn-secondary" onClick={vm.addExtraReturn} disabled={!productDirectory.length}>
                     <Plus size={18} />
                     {t('settlement.addExtraReturn')}
                   </button>
@@ -183,9 +186,17 @@ export default function EveningSettlementPage() {
                   <label className="label">{t('settlement.previousDue')}</label>
                   <input className="input h-11" type="number" min="0" step="0.01" value={vm.previousDueInput} onChange={(event) => vm.setPreviousDueInput(event.target.value)} disabled={vm.saving} />
                 </div>
+                <div className="w-full sm:w-36">
+                  <label className="label">{t('settlement.discount')}</label>
+                  <input className="input h-11" type="number" min="0" step="0.01" value={vm.discountInput} onChange={(event) => vm.setDiscountInput(event.target.value)} disabled={vm.saving} />
+                </div>
                 <div className="w-full sm:w-40">
                   <label className="label">{t('settlement.amountPaid')}</label>
                   <input className="input h-11" type="number" min="0" step="0.01" value={vm.amountPaidInput} onChange={(event) => vm.setAmountPaidInput(event.target.value)} disabled={vm.saving} />
+                </div>
+                <div className="w-full sm:w-36 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <p className="text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700">{t('settlement.todayDue')}</p>
+                  <p className="mt-1 text-lg font-black text-emerald-900">{formatCurrency(vm.todayDue)}</p>
                 </div>
                 <div className="w-full sm:w-36 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                   <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">{t('settlement.due')}</p>

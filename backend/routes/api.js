@@ -10,7 +10,6 @@ import { IssueController } from '../controllers/issueController.js';
 import { ProductController } from '../controllers/productController.js';
 import { UserController } from '../controllers/userController.js';
 import { SettlementController } from '../controllers/settlementController.js';
-import { StateController } from '../controllers/stateController.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requirePermission } from '../middleware/requireRole.js';
 import { PERMISSIONS } from '../lib/permissions.js';
@@ -18,7 +17,6 @@ import { PERMISSIONS } from '../lib/permissions.js';
 export function createApiRouter({ authService, env, inventoryService, auditService, userService, expenseService, dsrFinanceService, monthEndSummaryService, backupService, databaseManager }) {
   const router = Router();
   const authController = new AuthController(authService, env);
-  const stateController = new StateController(inventoryService);
   const productController = new ProductController(inventoryService);
   const dsrController = new DsrController(inventoryService);
   const issueController = new IssueController(inventoryService);
@@ -36,7 +34,6 @@ export function createApiRouter({ authService, env, inventoryService, auditServi
   router.use(requireAuth(authService, env));
 
   router.get('/auth/me', authController.me);
-  router.get('/state', stateController.getState);
 
   router.get('/users', requirePermission(PERMISSIONS.MANAGE_USERS), userController.list);
   router.post('/users', requirePermission(PERMISSIONS.MANAGE_USERS), userController.create);
@@ -62,18 +59,24 @@ export function createApiRouter({ authService, env, inventoryService, auditServi
   router.get('/month-end-summary', requirePermission(PERMISSIONS.MANAGE_DSR_FINANCE), monthEndSummaryController.getSummary);
   router.get('/database-backup', requirePermission(PERMISSIONS.MANAGE_BACKUPS), backupController.download);
 
+  router.get('/products/directory', requirePermission(PERMISSIONS.VIEW_STATE), productController.directory);
+  router.get('/products', requirePermission(PERMISSIONS.VIEW_STATE), productController.list);
   router.post('/products', requirePermission(PERMISSIONS.MANAGE_PRODUCTS), productController.create);
   router.put('/products/:id', requirePermission(PERMISSIONS.MANAGE_PRODUCTS), productController.update);
   router.delete('/products/:id', requirePermission(PERMISSIONS.MANAGE_PRODUCTS), productController.remove);
   router.post('/products/:id/stock', requirePermission(PERMISSIONS.MANAGE_PRODUCTS), productController.addStock);
 
+  router.get('/dsrs/directory', requirePermission(PERMISSIONS.VIEW_STATE), dsrController.directory);
+  router.get('/dsrs', requirePermission(PERMISSIONS.VIEW_STATE), dsrController.list);
   router.post('/dsrs', requirePermission(PERMISSIONS.MANAGE_DSRS), dsrController.create);
   router.put('/dsrs/:id', requirePermission(PERMISSIONS.MANAGE_DSRS), dsrController.update);
   router.delete('/dsrs/:id', requirePermission(PERMISSIONS.MANAGE_DSRS), dsrController.remove);
 
+  router.get('/issues', requirePermission(PERMISSIONS.VIEW_STATE), issueController.list);
   router.post('/issues', requirePermission(PERMISSIONS.CREATE_ISSUES), issueController.create);
   router.put('/issues/:id', requirePermission(PERMISSIONS.UPDATE_ISSUES), issueController.update);
 
+  router.get('/settlements', requirePermission(PERMISSIONS.VIEW_STATE), settlementController.list);
   router.post('/settlements', requirePermission(PERMISSIONS.CREATE_SETTLEMENTS), settlementController.create);
   router.put('/settlements/:id', requirePermission(PERMISSIONS.UPDATE_SETTLEMENTS), settlementController.update);
 

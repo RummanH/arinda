@@ -53,7 +53,7 @@ export default function DatabaseBackupPage() {
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="surface overflow-hidden p-6">
           <div className="flex items-start gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+            <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-[var(--secondary-soft)] text-[var(--secondary-strong)] ring-1 ring-[var(--secondary-soft)]">
               <Database size={28} />
             </div>
             <div className="space-y-3">

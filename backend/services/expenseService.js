@@ -1,28 +1,11 @@
 import { assert } from '../lib/errors.js';
 import { createId } from '../lib/ids.js';
+import { summarizeByAmount } from '../lib/aggregation.js';
+import { normalizeIsoDate, normalizeIsoMonth, startOfMonth, startOfNextMonth } from '../lib/dateRanges.js';
 import { deleteExpense, findExpenseById, insertExpense, listExpensesInRange, updateExpense } from '../repositories/expenseRepository.js';
 
 const EXPENSE_CATEGORIES = ['Bank', 'Salary', 'Office', 'Rent', 'Vehicle', 'Other'];
-
-function normalizeDate(value, fallback) {
-  const raw = String(value || '').trim();
-  if (!raw) {
-    return fallback;
-  }
-
-  assert(/^\d{4}-\d{2}-\d{2}$/.test(raw), 'Expense date must be in YYYY-MM-DD format.');
-  return raw;
-}
-
-function normalizeMonth(value, fallback) {
-  const raw = String(value || '').trim();
-  if (!raw) {
-    return fallback;
-  }
-
-  assert(/^\d{4}-\d{2}$/.test(raw), 'Month must be in YYYY-MM format.');
-  return raw;
-}
+const EXPENSE_DATE_ERROR = 'Expense date must be in YYYY-MM-DD format.';
 
 function normalizeCategory(value) {
   const raw = String(value || '').trim().toLowerCase();
@@ -34,7 +17,7 @@ function normalizeCategory(value) {
 function normalizeExpense(input, fallbackDate) {
   const amount = Number(input.amount);
   const note = String(input.note || '').trim();
-  const date = normalizeDate(input.date, fallbackDate);
+  const date = normalizeIsoDate(input.date, fallbackDate, EXPENSE_DATE_ERROR);
   const category = normalizeCategory(input.category);
 
   assert(amount > 0, 'Expense amount must be greater than zero.');
@@ -49,35 +32,14 @@ function normalizeExpense(input, fallbackDate) {
   };
 }
 
-function startOfMonth(month) {
-  return `${month}-01`;
-}
-
-function startOfNextMonth(month) {
-  const [year, monthPart] = month.split('-').map(Number);
-  const next = new Date(Date.UTC(year, monthPart - 1, 1));
-  next.setUTCMonth(next.getUTCMonth() + 1);
-  return next.toISOString().slice(0, 10);
-}
-
 function aggregateExpenses(expenses) {
-  const byCategory = new Map();
-  let totalAmount = 0;
+  const { count, totalAmount, groups } = summarizeByAmount(
+    expenses,
+    (expense) => expense.category,
+    (expense) => ({ category: expense.category }),
+  );
 
-  for (const expense of expenses) {
-    const amount = Number(expense.amount || 0);
-    totalAmount += amount;
-    const current = byCategory.get(expense.category) || { category: expense.category, count: 0, totalAmount: 0 };
-    current.count += 1;
-    current.totalAmount += amount;
-    byCategory.set(expense.category, current);
-  }
-
-  return {
-    count: expenses.length,
-    totalAmount,
-    byCategory: [...byCategory.values()].sort((left, right) => right.totalAmount - left.totalAmount),
-  };
+  return { count, totalAmount, byCategory: groups };
 }
 
 export class ExpenseService {
@@ -87,8 +49,8 @@ export class ExpenseService {
   }
 
   async getExpenseReport({ date, month }) {
-    const selectedDate = normalizeDate(date, new Date().toISOString().slice(0, 10));
-    const selectedMonth = normalizeMonth(month, selectedDate.slice(0, 7));
+    const selectedDate = normalizeIsoDate(date, new Date().toISOString().slice(0, 10), EXPENSE_DATE_ERROR);
+    const selectedMonth = normalizeIsoMonth(month, selectedDate.slice(0, 7));
     const monthStart = startOfMonth(selectedMonth);
     const nextMonthStart = startOfNextMonth(selectedMonth);
 

@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
+import { inventoryApi } from '../../../services/inventoryApi';
 import { toPieces } from '../../../utils/calculations.js';
 
-export function useMorningIssueViewModel({ products, dsrs, issues, today, saveIssueAction, t }) {
+const SCOPED_LOOKUP_PAGE_SIZE = 10;
+
+export function useMorningIssueViewModel({ products, dsrs, today, saveIssueAction, t }) {
   const activeDsrs = useMemo(() => dsrs.filter((dsr) => dsr.status === 'Active'), [dsrs]);
   const [date, setDate] = useState(today);
   const [dsrId, setDsrId] = useState(activeDsrs[0]?.id || '');
   const [quantities, setQuantities] = useState({});
   const [message, setMessage] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [existingIssue, setExistingIssue] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!activeDsrs.some((dsr) => dsr.id === dsrId) && activeDsrs[0]) {
@@ -16,7 +21,33 @@ export function useMorningIssueViewModel({ products, dsrs, issues, today, saveIs
   }, [activeDsrs, dsrId]);
 
   const selectedDsr = dsrs.find((dsr) => dsr.id === dsrId);
-  const existingIssue = issues.find((issue) => issue.date === date && issue.dsrId === dsrId);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!date || !dsrId) {
+      setExistingIssue(null);
+      return undefined;
+    }
+
+    inventoryApi.listIssues({ dsrId, dateFrom: date, dateTo: date, pageSize: SCOPED_LOOKUP_PAGE_SIZE })
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+
+        setExistingIssue((result.items || []).find((issue) => issue.date === date && issue.dsrId === dsrId) || null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setExistingIssue(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [date, dsrId, refreshKey]);
 
   useEffect(() => {
     if (!existingIssue) {
@@ -101,6 +132,7 @@ export function useMorningIssueViewModel({ products, dsrs, issues, today, saveIs
     setSaving(false);
     if (result.ok) {
       setMessage(null);
+      setRefreshKey((key) => key + 1);
     }
   }
 

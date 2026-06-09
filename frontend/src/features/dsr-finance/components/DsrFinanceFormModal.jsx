@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Save } from 'lucide-react';
 import { Alert, Modal } from '../../../components/ui.jsx';
+import { DatePickerField } from '../../../components/date-picker.jsx';
 import { useInventoryApp } from '../../../app/useInventoryApp.jsx';
 import { todayISO } from '../../../utils/calculations.js';
 
@@ -89,7 +90,7 @@ export default function DsrFinanceFormModal({ kind, record, dsrs, defaultDate, d
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <label className="label">{t('dsrFinance.date')}</label>
-            <input className="input" type="date" value={form.date} onChange={(event) => updateField('date', event.target.value)} />
+            <DatePickerField value={form.date} onChange={(value) => updateField('date', value)} />
           </div>
           <div>
             <label className="label">{t('dsrFinance.dsr')}</label>

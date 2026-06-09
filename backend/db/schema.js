@@ -133,6 +133,17 @@ export async function createSchema(pool) {
     ALTER TABLE settlements ADD COLUMN IF NOT EXISTS amount_paid NUMERIC NOT NULL DEFAULT 0;
     ALTER TABLE settlements ADD COLUMN IF NOT EXISTS due_amount NUMERIC NOT NULL DEFAULT 0;
     ALTER TABLE settlements ADD COLUMN IF NOT EXISTS extra_returns JSONB NOT NULL DEFAULT '[]';
+    ALTER TABLE settlements ADD COLUMN IF NOT EXISTS discount NUMERIC NOT NULL DEFAULT 0;
+    ALTER TABLE settlements ADD COLUMN IF NOT EXISTS extra_return_value NUMERIC NOT NULL DEFAULT 0;
+
+    CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
+    CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+    CREATE INDEX IF NOT EXISTS idx_dsrs_name ON dsrs(name);
+    CREATE INDEX IF NOT EXISTS idx_dsrs_status ON dsrs(status);
+    CREATE INDEX IF NOT EXISTS idx_issues_issue_date ON issues(issue_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_issues_dsr_id ON issues(dsr_id);
+    CREATE INDEX IF NOT EXISTS idx_settlements_settlement_date ON settlements(settlement_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_settlements_dsr_id ON settlements(dsr_id);
 
     ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT 'User';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;

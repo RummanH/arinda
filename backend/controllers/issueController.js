@@ -3,10 +3,18 @@ export class IssueController {
     this.inventoryService = inventoryService;
   }
 
+  list = async (req, res, next) => {
+    try {
+      res.json(await this.inventoryService.listIssues(req.query));
+    } catch (error) {
+      next(error);
+    }
+  };
+
   create = async (req, res, next) => {
     try {
-      const state = await this.inventoryService.saveIssue(req.body, req.currentUser);
-      res.status(201).json(state);
+      const result = await this.inventoryService.saveIssue(req.body, req.currentUser);
+      res.status(201).json(result);
     } catch (error) {
       next(error);
     }
@@ -14,7 +22,8 @@ export class IssueController {
 
   update = async (req, res, next) => {
     try {
-      res.json(await this.inventoryService.updateIssue(req.params.id, req.body, req.currentUser));
+      const issue = await this.inventoryService.updateIssue(req.params.id, req.body, req.currentUser);
+      res.json({ issue });
     } catch (error) {
       next(error);
     }

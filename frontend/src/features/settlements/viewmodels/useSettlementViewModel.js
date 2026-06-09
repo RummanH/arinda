@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { inventoryApi } from '../../../services/inventoryApi';
 import { aggregateIssuesFor, buildSheetData, getSettlementFor } from '../../../models/inventoryViewData.js';
 import { calculatePayable, calculateSold, createId, toPieces } from '../../../utils/calculations.js';
+
+const SCOPED_LOOKUP_PAGE_SIZE = 10;
 
 function toExtraReturnRow(item) {
   const piecesPerCase = Math.max(1, Number(item.piecesPerCase || 1));
@@ -15,16 +18,20 @@ function toExtraReturnRow(item) {
   };
 }
 
-export function useSettlementViewModel({ products, dsrs, issues, settlements, today, saveSettlementAction, t }) {
+export function useSettlementViewModel({ products, dsrs, today, saveSettlementAction, t }) {
   const activeDsrs = useMemo(() => dsrs.filter((dsr) => dsr.status === 'Active'), [dsrs]);
   const [date, setDate] = useState(today);
   const [dsrId, setDsrId] = useState(activeDsrs[0]?.id || '');
   const [returns, setReturns] = useState({});
   const [extraReturns, setExtraReturns] = useState([]);
   const [previousDueInput, setPreviousDueInput] = useState('');
+  const [discountInput, setDiscountInput] = useState('');
   const [amountPaidInput, setAmountPaidInput] = useState('');
   const [message, setMessage] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [scopedIssues, setScopedIssues] = useState([]);
+  const [scopedSettlements, setScopedSettlements] = useState([]);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!activeDsrs.some((dsr) => dsr.id === dsrId) && activeDsrs[0]) {
@@ -32,8 +39,41 @@ export function useSettlementViewModel({ products, dsrs, issues, settlements, to
     }
   }, [activeDsrs, dsrId]);
 
-  const issueData = useMemo(() => aggregateIssuesFor(issues, products, date, dsrId), [issues, products, date, dsrId]);
-  const completedSettlement = getSettlementFor(settlements, date, dsrId);
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!date || !dsrId) {
+      setScopedIssues([]);
+      setScopedSettlements([]);
+      return undefined;
+    }
+
+    Promise.all([
+      inventoryApi.listIssues({ dsrId, dateFrom: date, dateTo: date, pageSize: SCOPED_LOOKUP_PAGE_SIZE }),
+      inventoryApi.listSettlements({ dsrId, dateFrom: date, dateTo: date, pageSize: SCOPED_LOOKUP_PAGE_SIZE }),
+    ])
+      .then(([issuesResult, settlementsResult]) => {
+        if (cancelled) {
+          return;
+        }
+
+        setScopedIssues(issuesResult.items || []);
+        setScopedSettlements(settlementsResult.items || []);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setScopedIssues([]);
+          setScopedSettlements([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [date, dsrId, refreshKey]);
+
+  const issueData = useMemo(() => aggregateIssuesFor(scopedIssues, products, date, dsrId), [scopedIssues, products, date, dsrId]);
+  const completedSettlement = getSettlementFor(scopedSettlements, date, dsrId);
   const issueKey = issueData.issueIds.join('|');
 
   useEffect(() => {
@@ -41,6 +81,7 @@ export function useSettlementViewModel({ products, dsrs, issues, settlements, to
       setReturns({});
       setExtraReturns([]);
       setPreviousDueInput('');
+      setDiscountInput('');
       setAmountPaidInput('');
       setMessage(null);
       return;
@@ -57,6 +98,7 @@ export function useSettlementViewModel({ products, dsrs, issues, settlements, to
       }, {}),
     );
     setPreviousDueInput(String(Number(completedSettlement.previousDue || 0)));
+    setDiscountInput(String(Number(completedSettlement.discount || 0)));
     setAmountPaidInput(String(Number(completedSettlement.amountPaid || 0)));
     setExtraReturns((completedSettlement.extraReturns || []).map(toExtraReturnRow));
     setMessage(null);
@@ -78,12 +120,19 @@ export function useSettlementViewModel({ products, dsrs, issues, settlements, to
 
   const totalPayable = displayRows.reduce((sum, item) => sum + item.payable, 0);
   const totalExtraReturnedPieces = extraReturns.reduce((sum, item) => sum + toPieces(item.caseQty, item.pieceQty, item.piecesPerCase), 0);
+  const extraReturnValue = extraReturns.reduce((sum, row) => {
+    const product = products.find((p) => p.id === row.productId);
+    const rate = Number(product?.sellingPrice || 0);
+    return sum + toPieces(row.caseQty, row.pieceQty, row.piecesPerCase) * rate;
+  }, 0);
   const previousDue = Math.max(0, Number(previousDueInput || 0));
-  const receivableTotal = totalPayable + previousDue;
+  const discount = Math.max(0, Number(discountInput || 0));
+  const receivableTotal = Math.max(0, totalPayable + previousDue - discount - extraReturnValue);
   const amountPaid = Math.min(Math.max(0, Number(amountPaidInput || 0)), receivableTotal);
   const dueAmount = Math.max(receivableTotal - amountPaid, 0);
+  const todayDue = Math.max(0, totalPayable - discount - extraReturnValue - amountPaid);
   const hasInvalidReturns = displayRows.some((row) => row.invalid);
-  const sheet = buildSheetData({ date, dsrId, dsrs, issues, settlements, products });
+  const sheet = buildSheetData({ date, dsrId, dsrs, issues: scopedIssues, settlements: scopedSettlements, products });
 
   function updateReturn(rowKey, field, value) {
     setReturns((current) => ({
@@ -186,6 +235,8 @@ export function useSettlementViewModel({ products, dsrs, issues, settlements, to
       items,
       totalPayable: items.reduce((sum, item) => sum + item.payable, 0),
       previousDue,
+      discount,
+      extraReturnValue,
       amountPaid,
       dueAmount,
       status: 'Completed',
@@ -203,6 +254,7 @@ export function useSettlementViewModel({ products, dsrs, issues, settlements, to
     setSaving(false);
     if (result.ok) {
       setMessage(null);
+      setRefreshKey((key) => key + 1);
     }
   }
 
@@ -215,6 +267,8 @@ export function useSettlementViewModel({ products, dsrs, issues, settlements, to
     returns,
     previousDueInput,
     setPreviousDueInput,
+    discountInput,
+    setDiscountInput,
     amountPaidInput,
     setAmountPaidInput,
     message,
@@ -223,7 +277,10 @@ export function useSettlementViewModel({ products, dsrs, issues, settlements, to
     displayRows,
     extraReturns,
     totalExtraReturnedPieces,
+    extraReturnValue,
     totalPayable,
+    discount,
+    todayDue,
     dueAmount,
     hasInvalidReturns,
     sheet,

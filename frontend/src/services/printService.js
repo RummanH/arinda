@@ -14,10 +14,11 @@ export async function downloadSheetPdf(targetId, fileName) {
   }
 
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
+  const { getCssVar } = await import('../utils/theme.js');
   const canvas = await html2canvas(element, {
     scale: 2,
     useCORS: true,
-    backgroundColor: '#ffffff',
+    backgroundColor: getCssVar('--surface-white', '#ffffff'),
   });
 
   const imageData = canvas.toDataURL('image/png');

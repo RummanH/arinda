@@ -1,61 +1,40 @@
 import { useMemo, useState } from 'react';
 import { CircleDollarSign, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Alert, Badge, ChartPanel, EmptyState, LoadingState, SectionHeader, HorizontalBarChart, StatCard, TableSkeleton } from '../../../components/ui.jsx';
+import { DatePickerField, MonthPickerField } from '../../../components/date-picker.jsx';
 import { useInventoryApp } from '../../../app/useInventoryApp.jsx';
-import { inventoryApi } from '../../../services/inventoryApi';
 import { formatCurrency, formatDate, formatNumber, todayISO } from '../../../utils/calculations.js';
+import { toBarChartData } from '../../../utils/charts.js';
 import { useExpenseViewModel } from '../viewmodels/useExpenseViewModel';
 import ExpenseFormModal from '../components/ExpenseFormModal';
 
-function groupByCategory(items = []) {
-  const map = new Map();
-  for (const item of items) {
-    const current = map.get(item.category) || { label: item.category, value: 0, color: '#0f766e' };
-    current.value += Number(item.amount || 0);
-    map.set(item.category, current);
-  }
-  return [...map.values()];
-}
+const CATEGORY_CHART_FIELDS = { labelField: 'category', valueField: 'totalAmount' };
 
 export default function ExpensesPage() {
   const { t, can, confirm } = useInventoryApp();
-  const vm = useExpenseViewModel();
+  const vm = useExpenseViewModel({ confirm });
   const [modal, setModal] = useState(null);
   const canManageExpenses = can('manage_expenses');
 
-  const dailyCategories = useMemo(() => groupByCategory(vm.report?.dailyExpenses || []), [vm.report?.dailyExpenses]);
-  const monthlyCategories = useMemo(() => groupByCategory(vm.report?.monthlyExpenses || []), [vm.report?.monthlyExpenses]);
+  const dailyCategories = useMemo(() => toBarChartData(vm.report?.dailySummary?.byCategory || [], CATEGORY_CHART_FIELDS), [vm.report?.dailySummary?.byCategory]);
+  const monthlyCategories = useMemo(() => toBarChartData(vm.report?.monthlySummary?.byCategory || [], CATEGORY_CHART_FIELDS), [vm.report?.monthlySummary?.byCategory]);
 
   async function handleSave(expense) {
-    try {
-      const response = expense.id ? await inventoryApi.updateExpense(expense) : await inventoryApi.createExpense(expense);
-      await vm.refreshReport();
+    const result = await vm.saveExpense(expense);
+    if (result.ok) {
       setModal(null);
-      return { ok: Boolean(response.expense) };
-    } catch (requestError) {
-      return { ok: false, message: requestError.message };
     }
+    return result;
   }
 
   async function handleDelete(expenseId) {
     const expense = vm.report?.monthlyExpenses?.find((item) => item.id === expenseId);
-    const ok = await confirm({
+    await vm.deleteExpense(expenseId, {
       title: t('common.delete'),
       description: t('expenses.deleteConfirm', { category: expense?.category || t('expenses.expense') }),
       confirmLabel: t('common.delete'),
       tone: 'rose',
     });
-
-    if (!ok) {
-      return;
-    }
-
-    try {
-      await inventoryApi.deleteExpense(expenseId);
-      await vm.refreshReport();
-    } catch (requestError) {
-      vm.setError(requestError.message);
-    }
   }
 
   return (
@@ -82,11 +61,11 @@ export default function ExpensesPage() {
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <label className="label mt-3">{t('expenses.reportDate')}</label>
-            <input className="input" type="date" value={vm.date} onChange={(event) => vm.setDate(event.target.value)} />
+            <DatePickerField value={vm.date} onChange={vm.setDate} />
           </div>
           <div>
             <label className="label mt-3">{t('expenses.reportMonth')}</label>
-            <input className="input" type="month" value={vm.month} onChange={(event) => vm.setMonth(event.target.value)} />
+            <MonthPickerField value={vm.month} onChange={vm.setMonth} />
           </div>
         </div>
       </div>
@@ -230,16 +209,7 @@ export default function ExpensesPage() {
           expense={modal.id ? modal : null}
           defaultDate={vm.date || todayISO()}
           onClose={() => setModal(null)}
-          onSave={async (expense) => {
-            try {
-              const result = expense.id ? await inventoryApi.updateExpense(expense) : await inventoryApi.createExpense(expense);
-              await vm.refreshReport();
-              setModal(null);
-              return { ok: true, expense: result.expense };
-            } catch (requestError) {
-              return { ok: false, message: requestError.message };
-            }
-          }}
+          onSave={handleSave}
         />
       ) : null}
     </div>

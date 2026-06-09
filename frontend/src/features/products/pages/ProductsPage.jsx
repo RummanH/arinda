@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Boxes, PackagePlus, Pencil, Plus, Search, Trash2 } from 'lucide-react';
-import { Alert, Badge, EmptyState, SectionHeader } from '../../../components/ui.jsx';
+import { Alert, Badge, EmptyState, Pagination, SectionHeader, TableSkeleton } from '../../../components/ui.jsx';
 import { useInventoryApp } from '../../../app/useInventoryApp.jsx';
 import { formatCasePiece, formatCurrency, formatNumber } from '../../../utils/calculations.js';
 import ProductFormModal from '../components/ProductFormModal';
@@ -8,11 +8,13 @@ import StockUpdateModal from '../components/StockUpdateModal';
 import { useProductsViewModel } from '../viewmodels/useProductsViewModel';
 
 export default function ProductsPage() {
-  const { products, saveProduct, deleteProduct, addStock, t, can } = useInventoryApp();
-  const vm = useProductsViewModel(products);
+  const { productDirectory, saveProduct, deleteProduct, addStock, t, can } = useInventoryApp();
+  const vm = useProductsViewModel();
   const [productModal, setProductModal] = useState(null);
   const [stockModalProduct, setStockModalProduct] = useState(null);
   const canManageProducts = can('manage_products');
+  const outOfStockCount = productDirectory.filter((product) => product.stockPieces === 0).length;
+  const veryLowCount = productDirectory.filter((product) => product.stockPieces > 0 && product.stockPieces <= product.piecesPerCase).length;
 
   return (
     <div>
@@ -36,15 +38,15 @@ export default function ProductsPage() {
               <p className="text-sm font-medium text-slate-500">{t('products.description')}</p>
             </div>
             <div className="flex flex-wrap gap-2 text-sm font-bold">
-              <span className="muted-chip">{formatNumber(products.length)} {t('products.product')}</span>
-              <span className="muted-chip">{formatNumber(vm.outOfStockProducts.length)} out</span>
-              <span className="muted-chip">{formatNumber(vm.veryLowProducts.length)} low</span>
+              <span className="muted-chip">{formatNumber(productDirectory.length)} {t('products.product')}</span>
+              <span className="muted-chip">{formatNumber(outOfStockCount)} out</span>
+              <span className="muted-chip">{formatNumber(veryLowCount)} low</span>
             </div>
           </div>
-          {vm.outOfStockProducts.length || vm.veryLowProducts.length ? (
+          {outOfStockCount || veryLowCount ? (
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
-              {vm.outOfStockProducts.length ? <Alert type="error">{`${vm.outOfStockProducts.length} product currently has no available stock.`}</Alert> : null}
-              {vm.veryLowProducts.length ? <Alert type="warning">{`${vm.veryLowProducts.length} product is at a critically low stock level.`}</Alert> : null}
+              {outOfStockCount ? <Alert type="error">{`${outOfStockCount} product currently has no available stock.`}</Alert> : null}
+              {veryLowCount ? <Alert type="warning">{`${veryLowCount} product is at a critically low stock level.`}</Alert> : null}
             </div>
           ) : null}
           <div className="relative mt-4 max-w-md">
@@ -52,6 +54,15 @@ export default function ProductsPage() {
             <input className="input pl-10" value={vm.search} onChange={(event) => vm.setSearch(event.target.value)} placeholder={t('products.searchPlaceholder')} />
           </div>
         </div>
+        {vm.loading ? (
+          <div className="p-5">
+            <TableSkeleton columns={7} showHeader={false} />
+          </div>
+        ) : vm.error ? (
+          <div className="p-5">
+            <Alert type="error">{vm.error}</Alert>
+          </div>
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="table-head">
@@ -66,9 +77,9 @@ export default function ProductsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {vm.filteredProducts.map((product, index) => (
+              {vm.items.map((product, index) => (
                 <tr key={product.id} className="hover:bg-slate-50">
-                  <td className="table-cell font-black text-slate-400">{index + 1}</td>
+                  <td className="table-cell font-black text-slate-400">{(vm.page - 1) * vm.pageSize + index + 1}</td>
                   <td className="table-cell">
                     <div className="flex items-start gap-2">
                       <div>
@@ -111,9 +122,15 @@ export default function ProductsPage() {
             </tbody>
           </table>
         </div>
-        {!vm.filteredProducts.length ? (
+        )}
+        {!vm.loading && !vm.error && !vm.items.length ? (
           <div className="p-5">
             <EmptyState title={t('products.noMatchTitle')} description={t('products.noMatchDescription')} icon={Boxes} />
+          </div>
+        ) : null}
+        {!vm.loading && !vm.error && vm.items.length ? (
+          <div className="border-t border-slate-100 px-5 py-4">
+            <Pagination page={vm.page} totalPages={vm.totalPages} onPageChange={vm.setPage} />
           </div>
         ) : null}
       </div>

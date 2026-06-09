@@ -1,28 +1,112 @@
+import { useEffect, useState } from 'react';
 import {
+  buildActivityHeatmap,
   buildCategoryInventory,
   buildDailyRows,
   buildRoutePerformance,
   buildTopPayableProducts,
   buildTradingTrend,
 } from '../../../models/inventoryViewData.js';
+import { inventoryApi } from '../../../services/inventoryApi';
 import { formatCasePiece, formatCurrency, formatNumber } from '../../../utils/calculations.js';
+import { getCssVar } from '../../../utils/theme.js';
 
-export function useDashboardViewModel({ products, dsrs, issues, settlements, today, t }) {
+const DAY_SCOPE_PAGE_SIZE = 100;
+const TREND_DAYS = 7;
+const HEATMAP_DAYS = 70;
+const HEATMAP_PAGE_SIZE = 400;
+
+function subtractDays(dateISO, days) {
+  const date = new Date(`${dateISO}T00:00:00`);
+  date.setDate(date.getDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
+export function useDashboardViewModel({ products, dsrs, today, t }) {
+  const [todayIssues, setTodayIssues] = useState([]);
+  const [todaySettlements, setTodaySettlements] = useState([]);
+  const [trendIssues, setTrendIssues] = useState([]);
+  const [trendSettlements, setTrendSettlements] = useState([]);
+  const [heatmapIssues, setHeatmapIssues] = useState([]);
+  const [heatmapSettlements, setHeatmapSettlements] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!today) {
+      return undefined;
+    }
+
+    async function load() {
+      try {
+        setLoading(true);
+        setError('');
+        const trendFrom = subtractDays(today, TREND_DAYS - 1);
+        const heatmapFrom = subtractDays(today, HEATMAP_DAYS - 1);
+        const [
+          todayIssuesResult,
+          todaySettlementsResult,
+          trendIssuesResult,
+          trendSettlementsResult,
+          heatmapIssuesResult,
+          heatmapSettlementsResult,
+        ] = await Promise.all([
+          inventoryApi.listIssues({ dateFrom: today, dateTo: today, pageSize: DAY_SCOPE_PAGE_SIZE }),
+          inventoryApi.listSettlements({ dateFrom: today, dateTo: today, pageSize: DAY_SCOPE_PAGE_SIZE }),
+          inventoryApi.listIssues({ dateFrom: trendFrom, dateTo: today, pageSize: DAY_SCOPE_PAGE_SIZE }),
+          inventoryApi.listSettlements({ dateFrom: trendFrom, dateTo: today, pageSize: DAY_SCOPE_PAGE_SIZE }),
+          inventoryApi.listIssues({ dateFrom: heatmapFrom, dateTo: today, pageSize: HEATMAP_PAGE_SIZE }),
+          inventoryApi.listSettlements({ dateFrom: heatmapFrom, dateTo: today, pageSize: HEATMAP_PAGE_SIZE }),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setTodayIssues(todayIssuesResult.items || []);
+        setTodaySettlements(todaySettlementsResult.items || []);
+        setTrendIssues(trendIssuesResult.items || []);
+        setTrendSettlements(trendSettlementsResult.items || []);
+        setHeatmapIssues(heatmapIssuesResult.items || []);
+        setHeatmapSettlements(heatmapSettlementsResult.items || []);
+      } catch (requestError) {
+        if (!cancelled) {
+          setError(requestError.message);
+          setTodayIssues([]);
+          setTodaySettlements([]);
+          setTrendIssues([]);
+          setTrendSettlements([]);
+          setHeatmapIssues([]);
+          setHeatmapSettlements([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [today]);
+
   const activeDsrs = dsrs.filter((dsr) => dsr.status === 'Active').length;
   const stockUnits = products.reduce((sum, product) => sum + product.stockPieces, 0);
   const stockValue = products.reduce((sum, product) => sum + product.stockPieces * Number(product.purchasePrice || 0), 0);
   const stockSellingValue = products.reduce((sum, product) => sum + product.stockPieces * Number(product.sellingPrice || 0), 0);
   const expectedStockProfit = stockSellingValue - stockValue;
-  const todayIssues = issues.filter((issue) => issue.date === today);
   const totalIssuedToday = todayIssues.reduce((sum, issue) => sum + issue.items.reduce((itemSum, item) => itemSum + item.issuedPieces, 0), 0);
-  const todaySettlements = settlements.filter((settlement) => settlement.date === today);
   const totalReturnedToday = todaySettlements.reduce((sum, settlement) => sum + settlement.items.reduce((itemSum, item) => itemSum + item.returnedPieces, 0), 0);
   const totalSoldToday = todaySettlements.reduce((sum, settlement) => sum + settlement.items.reduce((itemSum, item) => itemSum + item.soldPieces, 0), 0);
   const payableToday = todaySettlements.reduce((sum, settlement) => sum + Number(settlement.amountPaid || 0), 0);
   const lowStockAll = products.filter((product) => product.stockPieces <= product.piecesPerCase * 4);
   const outOfStockCount = products.filter((product) => product.stockPieces === 0).length;
   const lowStockProducts = [...lowStockAll].sort((a, b) => a.stockPieces - b.stockPieces).slice(0, 8);
-  const dailyRows = buildDailyRows({ date: today, dsrs, issues, settlements, products });
+  const dailyRows = buildDailyRows({ date: today, dsrs, issues: todayIssues, settlements: todaySettlements, products });
   const pendingRows = dailyRows.filter((row) => row.status === 'Pending');
   const completedRows = dailyRows.filter((row) => row.status === 'Completed');
   const issuedDsrIds = new Set(todayIssues.map((issue) => issue.dsrId));
@@ -53,6 +137,8 @@ export function useDashboardViewModel({ products, dsrs, issues, settlements, tod
     .slice(0, 5);
 
   return {
+    loading,
+    error,
     activeDsrs,
     stockValue,
     stockSellingValue,
@@ -93,14 +179,15 @@ export function useDashboardViewModel({ products, dsrs, issues, settlements, tod
         tone: payableToday ? 'blue' : 'slate',
       },
     ],
-    tradingTrend: buildTradingTrend({ issues, settlements, today }),
+    tradingTrend: buildTradingTrend({ issues: trendIssues, settlements: trendSettlements, today, limit: TREND_DAYS }),
+    activityHeatmap: buildActivityHeatmap({ issues: heatmapIssues, settlements: heatmapSettlements, today, days: HEATMAP_DAYS }),
     inventoryByCategory: buildCategoryInventory(products),
     routePerformance: buildRoutePerformance(dailyRows),
     topPayableProducts: buildTopPayableProducts(todaySettlements),
     settlementMix: [
-      { label: t('dashboard.completed'), value: completedRows.length, color: '#0f766e' },
-      { label: t('dashboard.pending'), value: pendingRows.length, color: '#f59e0b' },
-      { label: t('dashboard.noIssue'), value: Math.max(activeDsrs - issuedDsrIds.size, 0), color: '#cbd5e1' },
+      { label: t('dashboard.completed'), value: completedRows.length, color: getCssVar('--success', '#0f766e') },
+      { label: t('dashboard.pending'), value: pendingRows.length, color: getCssVar('--warning', '#f59e0b') },
+      { label: t('dashboard.noIssue'), value: Math.max(activeDsrs - issuedDsrIds.size, 0), color: getCssVar('--muted', '#cbd5e1') },
     ],
     operationalPulse: [
       { title: t('dashboard.collectionFlow'), value: `${formatNumber(completionRate)}%`, subtitle: t('dashboard.collectionFlowDesc') },

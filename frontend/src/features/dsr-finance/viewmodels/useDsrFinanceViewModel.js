@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { inventoryApi } from '../../../services/inventoryApi';
 import { todayISO } from '../../../utils/calculations.js';
 
-export function useDsrFinanceViewModel(kind) {
+const RECORD_APIS = {
+  cash: { create: 'createCashReceipt', update: 'updateCashReceipt', remove: 'deleteCashReceipt' },
+  advance: { create: 'createAdvance', update: 'updateAdvance', remove: 'deleteAdvance' },
+};
+
+export function useDsrFinanceViewModel(kind, { confirm }) {
   const today = todayISO();
   const [date, setDate] = useState(today);
   const [month, setMonth] = useState(today.slice(0, 7));
@@ -10,6 +15,7 @@ export function useDsrFinanceViewModel(kind) {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const api = RECORD_APIS[kind];
 
   async function loadReport(nextDate = date, nextMonth = month, nextDsrId = dsrId) {
     try {
@@ -33,6 +39,30 @@ export function useDsrFinanceViewModel(kind) {
     await loadReport(date, month, dsrId);
   }
 
+  async function saveRecord(record) {
+    try {
+      const action = record.id ? api.update : api.create;
+      await inventoryApi[action](record);
+      await refreshReport();
+      return { ok: true };
+    } catch (requestError) {
+      return { ok: false, message: requestError.message };
+    }
+  }
+
+  async function deleteRecord(recordId, confirmOptions) {
+    if (!(await confirm(confirmOptions))) {
+      return;
+    }
+
+    try {
+      await inventoryApi[api.remove](recordId);
+      await refreshReport();
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  }
+
   return {
     date,
     month,
@@ -45,6 +75,7 @@ export function useDsrFinanceViewModel(kind) {
     error,
     setError,
     refreshReport,
+    saveRecord,
+    deleteRecord,
   };
 }
-

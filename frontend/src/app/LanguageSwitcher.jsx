@@ -9,14 +9,14 @@ export default function LanguageSwitcher({ language, onChange, t, compact = fals
       </span>
       <button
         type="button"
-        className={cx('h-8 rounded-full px-3 text-xs font-black uppercase tracking-[0.14em] transition', language === 'en' ? 'bg-blue-600 text-white shadow-[0_10px_18px_rgba(37,99,235,0.18)]' : 'text-slate-500 hover:text-slate-900')}
+        className={cx('h-8 rounded-full px-3 text-xs font-black uppercase tracking-[0.14em] transition', language === 'en' ? 'bg-[var(--secondary)] text-white shadow-[0_10px_18px_var(--secondary-shadow)]' : 'text-slate-500 hover:text-slate-900')}
         onClick={() => onChange('en')}
       >
         {t('lang.english')}
       </button>
       <button
         type="button"
-        className={cx('h-8 rounded-full px-3 text-xs font-black uppercase tracking-[0.14em] transition', language === 'bn' ? 'bg-blue-600 text-white shadow-[0_10px_18px_rgba(37,99,235,0.18)]' : 'text-slate-500 hover:text-slate-900')}
+        className={cx('h-8 rounded-full px-3 text-xs font-black uppercase tracking-[0.14em] transition', language === 'bn' ? 'bg-[var(--secondary)] text-white shadow-[0_10px_18px_var(--secondary-shadow)]' : 'text-slate-500 hover:text-slate-900')}
         onClick={() => onChange('bn')}
       >
         {t('lang.bangla')}

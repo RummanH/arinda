@@ -1,12 +1,13 @@
 import { AlertTriangle, Save, Truck } from 'lucide-react';
 import { Alert, EmptyState, SectionHeader, cx } from '../../../components/ui.jsx';
+import { DatePickerField } from '../../../components/date-picker.jsx';
 import { useInventoryApp } from '../../../app/useInventoryApp.jsx';
 import { formatCasePiece, formatCurrency, formatNumber } from '../../../utils/calculations.js';
 import { useMorningIssueViewModel } from '../viewmodels/useMorningIssueViewModel';
 
 export default function MorningIssuePage() {
-  const { products, dsrs, issues, today, saveIssue, t, can } = useInventoryApp();
-  const vm = useMorningIssueViewModel({ products, dsrs, issues, today, saveIssueAction: saveIssue, t });
+  const { productDirectory, dsrDirectory, today, saveIssue, t, can } = useInventoryApp();
+  const vm = useMorningIssueViewModel({ products: productDirectory, dsrs: dsrDirectory, today, saveIssueAction: saveIssue, t });
   const canCreateIssue = can('create_issues');
   const canUpdateIssue = can('update_issues');
   const canEditIssue = vm.existingIssue ? canUpdateIssue : canCreateIssue;
@@ -19,7 +20,7 @@ export default function MorningIssuePage() {
         <div className="grid gap-4 lg:grid-cols-[180px_minmax(220px,1fr)_repeat(3,minmax(130px,160px))]">
           <div>
             <label className="label">{t('common.date')}</label>
-            <input className="input" type="date" value={vm.date} onChange={(event) => vm.setDate(event.target.value)} />
+            <DatePickerField value={vm.date} onChange={vm.setDate} />
           </div>
           <div>
             <label className="label">{t('dsr.title')}</label>
@@ -39,9 +40,9 @@ export default function MorningIssuePage() {
             <p className="text-xs font-bold uppercase text-slate-500">{t('morningIssue.totalQty')}</p>
             <p className="mt-1 text-xl font-black text-slate-950">{formatNumber(vm.totalIssuedPieces)} pcs</p>
           </div>
-          <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
-            <p className="text-xs font-bold uppercase text-blue-700">{vm.existingIssue ? t('morningIssue.updatedValue') : t('morningIssue.issueValue')}</p>
-            <p className="mt-1 text-xl font-black text-blue-900">{formatCurrency(vm.totalIssueValue)}</p>
+          <div className="rounded-lg border border-[var(--secondary-soft)] bg-[var(--secondary-soft)] px-4 py-3">
+            <p className="text-xs font-bold uppercase text-[var(--secondary-strong)]">{vm.existingIssue ? t('morningIssue.updatedValue') : t('morningIssue.issueValue')}</p>
+            <p className="mt-1 text-xl font-black text-[var(--secondary-strong)]">{formatCurrency(vm.totalIssueValue)}</p>
           </div>
         </div>
         {vm.message ? (
@@ -64,7 +65,7 @@ export default function MorningIssuePage() {
           </div>
           <div className="flex flex-wrap gap-2">
             {canEditIssue ? (
-              <button type="button" className="btn-primary" onClick={vm.saveIssue} disabled={vm.saving || !products.length || Boolean(vm.invalidRows.length)}>
+              <button type="button" className="btn-primary" onClick={vm.saveIssue} disabled={vm.saving || !productDirectory.length || Boolean(vm.invalidRows.length)}>
                 <Save size={18} />
                 {vm.saving ? t('common.saving') : vm.existingIssue ? t('morningIssue.updateIssue') : t('morningIssue.saveIssue')}
               </button>
@@ -74,7 +75,7 @@ export default function MorningIssuePage() {
           </div>
         </div>
 
-        {products.length ? (
+        {productDirectory.length ? (
           <>
             <div className="overflow-x-auto">
               <table className="w-full">

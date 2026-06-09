@@ -3,10 +3,26 @@ export class DsrController {
     this.inventoryService = inventoryService;
   }
 
+  list = async (req, res, next) => {
+    try {
+      res.json(await this.inventoryService.listDsrs(req.query));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  directory = async (req, res, next) => {
+    try {
+      res.json(await this.inventoryService.getDsrsDirectory());
+    } catch (error) {
+      next(error);
+    }
+  };
+
   create = async (req, res, next) => {
     try {
-      const state = await this.inventoryService.saveDsr(req.body, req.currentUser);
-      res.status(201).json(state);
+      const dsr = await this.inventoryService.saveDsr(req.body, req.currentUser);
+      res.status(201).json({ dsr });
     } catch (error) {
       next(error);
     }
@@ -14,8 +30,8 @@ export class DsrController {
 
   update = async (req, res, next) => {
     try {
-      const state = await this.inventoryService.saveDsr({ ...req.body, id: req.params.id }, req.currentUser);
-      res.json(state);
+      const dsr = await this.inventoryService.saveDsr({ ...req.body, id: req.params.id }, req.currentUser);
+      res.json({ dsr });
     } catch (error) {
       next(error);
     }

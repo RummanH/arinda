@@ -1,15 +1,16 @@
 import { CircleDollarSign, Download, Eye, FileText, PackageCheck, Printer, RotateCcw, Truck } from 'lucide-react';
 import PrintableSheet from '../../../components/PrintableSheet.jsx';
-import { Badge, ChartPanel, DonutChart, EmptyState, SectionHeader, StackedBarChart, StatCard } from '../../../components/ui.jsx';
+import { Alert, Badge, ChartPanel, DonutChart, EmptyState, LoadingState, SectionHeader, StackedBarChart, StatCard } from '../../../components/ui.jsx';
 import { statusTone } from '../../../models/inventoryViewData.js';
 import { useInventoryApp } from '../../../app/useInventoryApp.jsx';
 import { buildPdfFileName, downloadSheetPdf } from '../../../services/printService.js';
 import { formatCurrency, formatDate, formatNumber } from '../../../utils/calculations.js';
 import { useDailyReportsViewModel } from '../viewmodels/useDailyReportsViewModel';
+import { getCssVar } from '../../../utils/theme.js';
 
 export default function DailyReportsPage() {
-  const { products, dsrs, issues, settlements, today, t } = useInventoryApp();
-  const vm = useDailyReportsViewModel({ products, dsrs, issues, settlements, today, t });
+  const { productDirectory, dsrDirectory, today, t } = useInventoryApp();
+  const vm = useDailyReportsViewModel({ products: productDirectory, dsrs: dsrDirectory, today, t });
 
   return (
     <div>
@@ -29,15 +30,21 @@ export default function DailyReportsPage() {
         </div>
       </div>
 
+      {vm.loading ? (
+        <LoadingState title={t('nav.reports')} description={t('status.loadingData')} />
+      ) : vm.error ? (
+        <Alert type="error">{vm.error}</Alert>
+      ) : (
+        <>
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <ChartPanel title={t('reports.routeReport', { date: formatDate(vm.date) })} description={t('reports.routeReportDescription')}>
           {vm.chartRows.length ? (
             <StackedBarChart
               data={vm.chartRows}
               segments={[
-                { key: 'issued', label: t('reports.issued'), color: '#bfdbfe' },
-                { key: 'returned', label: t('reports.returned'), color: '#fdba74' },
-                { key: 'sold', label: t('reports.sold'), color: '#0f766e' },
+                { key: 'issued', label: t('reports.issued'), color: getCssVar('--issued-soft', '#bfdbfe') },
+                { key: 'returned', label: t('reports.returned'), color: getCssVar('--returned', '#fdba74') },
+                { key: 'sold', label: t('reports.sold'), color: getCssVar('--success', '#0f766e') },
               ]}
               totalFormatter={(value) => `${formatNumber(value)} pcs`}
             />
@@ -123,6 +130,8 @@ export default function DailyReportsPage() {
           <PrintableSheet sheet={vm.selectedSheet} printTarget targetId="report-print-sheet" />
         </div>
       ) : null}
+        </>
+      )}
     </div>
   );
 }

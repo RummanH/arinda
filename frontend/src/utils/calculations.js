@@ -76,6 +76,23 @@ export function formatDateTime(date) {
   }).format(value);
 }
 
+export function formatMonth(month) {
+  if (!month) return '';
+
+  const value = month instanceof Date
+    ? month
+    : new Date(typeof month === 'string' && /^\d{4}-\d{2}$/.test(month) ? `${month}-01T00:00:00` : month);
+
+  if (Number.isNaN(value.getTime())) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat('en-GB', {
+    month: 'short',
+    year: 'numeric',
+  }).format(value);
+}
+
 export function createId(prefix) {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return `${prefix}-${crypto.randomUUID()}`;

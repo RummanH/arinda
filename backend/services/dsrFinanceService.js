@@ -1,5 +1,7 @@
 import { assert } from '../lib/errors.js';
 import { createId } from '../lib/ids.js';
+import { summarizeByAmount } from '../lib/aggregation.js';
+import { normalizeIsoDate, normalizeIsoMonth, startOfMonth, startOfNextMonth } from '../lib/dateRanges.js';
 import { findDsrById } from '../repositories/dsrRepository.js';
 import {
   deleteRecord,
@@ -36,31 +38,11 @@ function getModuleConfig(kind) {
   return config;
 }
 
-function normalizeDate(value, fallback, message) {
-  const raw = String(value || '').trim();
-  if (!raw) {
-    return fallback;
-  }
-
-  assert(/^\d{4}-\d{2}-\d{2}$/.test(raw), message);
-  return raw;
-}
-
-function normalizeMonth(value, fallback) {
-  const raw = String(value || '').trim();
-  if (!raw) {
-    return fallback;
-  }
-
-  assert(/^\d{4}-\d{2}$/.test(raw), 'Month must be in YYYY-MM format.');
-  return raw;
-}
-
 function normalizeRecord(input, fallbackDate, message) {
   const amount = Number(input.amount);
   const note = String(input.note || '').trim();
   const dsrId = String(input.dsrId || '').trim();
-  const date = normalizeDate(input.date, fallbackDate, message);
+  const date = normalizeIsoDate(input.date, fallbackDate, message);
 
   assert(dsrId, 'DSR is required.');
   assert(amount > 0, 'Amount must be greater than zero.');
@@ -75,42 +57,14 @@ function normalizeRecord(input, fallbackDate, message) {
   };
 }
 
-function startOfMonth(month) {
-  return `${month}-01`;
-}
-
-function startOfNextMonth(month) {
-  const [year, monthPart] = month.split('-').map(Number);
-  const next = new Date(Date.UTC(year, monthPart - 1, 1));
-  next.setUTCMonth(next.getUTCMonth() + 1);
-  return next.toISOString().slice(0, 10);
-}
-
 function aggregateRecords(records) {
-  const byDsr = new Map();
-  let totalAmount = 0;
+  const { count, totalAmount, groups } = summarizeByAmount(
+    records,
+    (record) => record.dsrId,
+    (record) => ({ dsrId: record.dsrId, dsrName: record.dsrName, dsrArea: record.dsrArea, dsrPhone: record.dsrPhone }),
+  );
 
-  for (const record of records) {
-    const amount = Number(record.amount || 0);
-    totalAmount += amount;
-    const current = byDsr.get(record.dsrId) || {
-      dsrId: record.dsrId,
-      dsrName: record.dsrName,
-      dsrArea: record.dsrArea,
-      dsrPhone: record.dsrPhone,
-      count: 0,
-      totalAmount: 0,
-    };
-    current.count += 1;
-    current.totalAmount += amount;
-    byDsr.set(record.dsrId, current);
-  }
-
-  return {
-    count: records.length,
-    totalAmount,
-    byDsr: [...byDsr.values()].sort((left, right) => right.totalAmount - left.totalAmount),
-  };
+  return { count, totalAmount, byDsr: groups };
 }
 
 export class DsrFinanceService {
@@ -121,8 +75,8 @@ export class DsrFinanceService {
 
   async getReport(kind, query = {}) {
     const config = getModuleConfig(kind);
-    const selectedDate = normalizeDate(query.date, new Date().toISOString().slice(0, 10), config.dateError);
-    const selectedMonth = normalizeMonth(query.month, selectedDate.slice(0, 7));
+    const selectedDate = normalizeIsoDate(query.date, new Date().toISOString().slice(0, 10), config.dateError);
+    const selectedMonth = normalizeIsoMonth(query.month, selectedDate.slice(0, 7));
     const selectedDsrId = String(query.dsrId || '').trim();
     const monthStart = startOfMonth(selectedMonth);
     const nextMonthStart = startOfNextMonth(selectedMonth);

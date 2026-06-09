@@ -18,6 +18,23 @@ function mapActivityLog(row) {
   };
 }
 
+function buildActivityLogSearchClause(search, params) {
+  if (!search) {
+    return '';
+  }
+
+  params.push(`%${search}%`);
+  const index = params.length;
+  return `WHERE (
+    users.name ILIKE $${index}
+    OR users.email ILIKE $${index}
+    OR activity_logs.action_type ILIKE $${index}
+    OR activity_logs.entity_type ILIKE $${index}
+    OR activity_logs.entity_id ILIKE $${index}
+    OR activity_logs.description ILIKE $${index}
+  )`;
+}
+
 export function insertActivityLog(client, log) {
   return client.query(
     `INSERT INTO activity_logs (
@@ -35,7 +52,23 @@ export function insertActivityLog(client, log) {
   );
 }
 
-export async function listActivityLogs(client, limit = 100) {
+export async function countActivityLogs(client, { search } = {}) {
+  const params = [];
+  const where = buildActivityLogSearchClause(search, params);
+  const result = await client.query(
+    `SELECT COUNT(*)::INTEGER AS count
+     FROM activity_logs
+     LEFT JOIN users ON users.id = activity_logs.user_id
+     ${where}`,
+    params,
+  );
+  return result.rows[0].count;
+}
+
+export async function listActivityLogsPage(client, { search, limit, offset }) {
+  const params = [];
+  const where = buildActivityLogSearchClause(search, params);
+  params.push(limit, offset);
   const result = await client.query(
     `SELECT
       activity_logs.id,
@@ -51,9 +84,10 @@ export async function listActivityLogs(client, limit = 100) {
       users.role AS user_role
     FROM activity_logs
     LEFT JOIN users ON users.id = activity_logs.user_id
+    ${where}
     ORDER BY activity_logs.created_at DESC
-    LIMIT $1`,
-    [limit],
+    LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params,
   );
 
   return result.rows.map(mapActivityLog);

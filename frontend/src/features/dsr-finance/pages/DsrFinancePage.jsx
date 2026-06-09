@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { BadgeDollarSign, HandCoins, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Alert, Badge, ChartPanel, EmptyState, LoadingState, SectionHeader, HorizontalBarChart, StatCard, TableSkeleton } from '../../../components/ui.jsx';
+import { DatePickerField, MonthPickerField } from '../../../components/date-picker.jsx';
 import { useInventoryApp } from '../../../app/useInventoryApp.jsx';
-import { inventoryApi } from '../../../services/inventoryApi';
 import { formatCurrency, formatDate, formatNumber, todayISO } from '../../../utils/calculations.js';
+import { toBarChartData } from '../../../utils/charts.js';
 import { useDsrFinanceViewModel } from '../viewmodels/useDsrFinanceViewModel';
 import DsrFinanceFormModal from '../components/DsrFinanceFormModal';
 
@@ -30,32 +31,21 @@ const MODULES = {
   },
 };
 
-function toChartData(items = []) {
-  return items.map((item, index) => ({
-    label: item.dsrName,
-    value: Number(item.totalAmount || 0),
-    meta: item.dsrArea || item.dsrPhone || '',
-    color: index % 2 === 0 ? '#0f766e' : '#2563eb',
-  }));
-}
-
-function renderDsrOption(t, dsr) {
-  return `${dsr.name} - ${dsr.area}`;
-}
+const DSR_CHART_FIELDS = { labelField: 'dsrName', valueField: 'totalAmount', metaFields: ['dsrArea', 'dsrPhone'] };
 
 export default function DsrFinancePage() {
-  const { t, can, dsrs, confirm } = useInventoryApp();
+  const { t, can, dsrDirectory, confirm } = useInventoryApp();
   const [activeTab, setActiveTab] = useState('cash');
-  const cashVm = useDsrFinanceViewModel('cash');
-  const advanceVm = useDsrFinanceViewModel('advance');
+  const cashVm = useDsrFinanceViewModel('cash', { confirm });
+  const advanceVm = useDsrFinanceViewModel('advance', { confirm });
   const [modal, setModal] = useState(null);
   const canManageDsrFinance = can('manage_dsr_finance');
 
   const activeVm = activeTab === 'cash' ? cashVm : advanceVm;
   const moduleConfig = MODULES[activeTab];
   const Icon = moduleConfig.icon;
-  const dailyChartData = useMemo(() => toChartData(activeVm.report?.dailySummary?.byDsr || []), [activeVm.report?.dailySummary?.byDsr]);
-  const monthlyChartData = useMemo(() => toChartData(activeVm.report?.monthlySummary?.byDsr || []), [activeVm.report?.monthlySummary?.byDsr]);
+  const dailyChartData = useMemo(() => toBarChartData(activeVm.report?.dailySummary?.byDsr || [], DSR_CHART_FIELDS), [activeVm.report?.dailySummary?.byDsr]);
+  const monthlyChartData = useMemo(() => toBarChartData(activeVm.report?.monthlySummary?.byDsr || [], DSR_CHART_FIELDS), [activeVm.report?.monthlySummary?.byDsr]);
 
   if (activeVm.loading) {
     return (
@@ -103,45 +93,24 @@ export default function DsrFinancePage() {
   }
 
   async function handleSave(record) {
-    const api = activeTab === 'cash'
-      ? (record.id ? inventoryApi.updateCashReceipt : inventoryApi.createCashReceipt)
-      : (record.id ? inventoryApi.updateAdvance : inventoryApi.createAdvance);
-
-    try {
-      await api(record);
-      await activeVm.refreshReport();
+    const result = await activeVm.saveRecord(record);
+    if (result.ok) {
       setModal(null);
-      return { ok: true };
-    } catch (requestError) {
-      return { ok: false, message: requestError.message };
     }
+    return result;
   }
 
   async function handleDelete(recordId) {
     const record = activeVm.report?.monthlyRecords?.find((item) => item.id === recordId);
-    const confirmMessage = t(moduleConfig.deleteConfirmKey, {
-      dsrName: record?.dsrName || t('dsrFinance.dsr'),
-      recordType: t(moduleConfig.recordKey),
-    });
-
-    const ok = await confirm({
+    await activeVm.deleteRecord(recordId, {
       title: t('common.delete'),
-      description: confirmMessage,
+      description: t(moduleConfig.deleteConfirmKey, {
+        dsrName: record?.dsrName || t('dsrFinance.dsr'),
+        recordType: t(moduleConfig.recordKey),
+      }),
       confirmLabel: t('common.delete'),
       tone: 'rose',
     });
-
-    if (!ok) {
-      return;
-    }
-
-    try {
-      const deleter = activeTab === 'cash' ? inventoryApi.deleteCashReceipt : inventoryApi.deleteAdvance;
-      await deleter(recordId);
-      await activeVm.refreshReport();
-    } catch (requestError) {
-      activeVm.setError(requestError.message);
-    }
   }
 
   const dailyRecords = activeVm.report?.dailyRecords || [];
@@ -196,19 +165,19 @@ export default function DsrFinancePage() {
         <div className="grid gap-4 md:grid-cols-3">
           <div>
             <label className="label">{t('dsrFinance.reportDate')}</label>
-            <input className="input" type="date" value={activeVm.date} onChange={(event) => activeVm.setDate(event.target.value)} />
+            <DatePickerField value={activeVm.date} onChange={activeVm.setDate} />
           </div>
           <div>
             <label className="label">{t('dsrFinance.reportMonth')}</label>
-            <input className="input" type="month" value={activeVm.month} onChange={(event) => activeVm.setMonth(event.target.value)} />
+            <MonthPickerField value={activeVm.month} onChange={activeVm.setMonth} />
           </div>
           <div>
             <label className="label">{t('dsrFinance.dsrFilter')}</label>
             <select className="input" value={activeVm.dsrId} onChange={(event) => activeVm.setDsrId(event.target.value)}>
               <option value="">{t('dsrFinance.allDsrs')}</option>
-              {dsrs.map((dsr) => (
+              {dsrDirectory.map((dsr) => (
                 <option key={dsr.id} value={dsr.id}>
-                  {renderDsrOption(t, dsr)}
+                  {dsr.name} - {dsr.area}
                 </option>
               ))}
             </select>
@@ -347,7 +316,7 @@ export default function DsrFinancePage() {
         <DsrFinanceFormModal
           kind={activeTab}
           record={modal.id ? modal : null}
-          dsrs={dsrs}
+          dsrs={dsrDirectory}
           defaultDate={activeVm.date || todayISO()}
           defaultDsrId={activeVm.dsrId}
           onClose={() => setModal(null)}

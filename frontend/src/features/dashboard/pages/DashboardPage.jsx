@@ -1,13 +1,32 @@
 import { AlertTriangle, Boxes, CalendarDays, CheckCircle2, CircleDollarSign, PackageCheck, RotateCcw, Truck, UserCheck } from 'lucide-react';
-import { ChartPanel, DonutChart, EmptyState, HorizontalBarChart, SectionHeader, StackedBarChart, StatCard, TrendChart, cx } from '../../../components/ui.jsx';
+import { ActivityHeatmap, Alert, ChartPanel, DonutChart, EmptyState, HorizontalBarChart, LoadingState, RadialProgressChart, SectionHeader, StackedBarChart, StatCard, TrendChart, cx } from '../../../components/ui.jsx';
 import { formatCurrency, formatDate, formatNumber } from '../../../utils/calculations.js';
 import { useInventoryApp } from '../../../app/useInventoryApp.jsx';
 import InsightLine from '../components/InsightLine';
 import { useDashboardViewModel } from '../viewmodels/useDashboardViewModel';
+import { getCssVar } from '../../../utils/theme.js';
 
 export default function DashboardPage() {
-  const { products, dsrs, issues, settlements, today, t } = useInventoryApp();
-  const vm = useDashboardViewModel({ products, dsrs, issues, settlements, today, t });
+  const { productDirectory, dsrDirectory, today, t } = useInventoryApp();
+  const vm = useDashboardViewModel({ products: productDirectory, dsrs: dsrDirectory, today, t });
+
+  if (vm.loading) {
+    return (
+      <div>
+        <SectionHeader eyebrow={t('dashboard.eyebrow')} title={t('dashboard.title')} description={t('dashboard.description')} />
+        <LoadingState title={t('dashboard.title')} description={t('status.loadingData')} />
+      </div>
+    );
+  }
+
+  if (vm.error) {
+    return (
+      <div>
+        <SectionHeader eyebrow={t('dashboard.eyebrow')} title={t('dashboard.title')} description={t('dashboard.description')} />
+        <Alert type="error">{vm.error}</Alert>
+      </div>
+    );
+  }
 
   const taskIcons = {
     morningStarted: Truck,
@@ -24,11 +43,61 @@ export default function DashboardPage() {
     <div>
       <SectionHeader eyebrow={t('dashboard.eyebrow')} title={t('dashboard.title')} description={t('dashboard.description')} />
 
-      <div className="mb-6 overflow-hidden rounded-[34px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(244,247,251,0.96))] shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <ChartPanel title={t('dashboard.tradingTrend')} description={t('dashboard.tradingTrendDescription')}>
+          <TrendChart
+            data={vm.tradingTrend}
+            valueFormatter={formatCurrency}
+            series={[
+              { key: 'paid', label: t('dashboard.payableToday'), color: getCssVar('--success', '#0f766e'), fill: true },
+              { key: 'issued', label: t('reports.issued'), color: getCssVar('--secondary', '#2563eb') },
+              { key: 'sold', label: t('reports.sold'), color: getCssVar('--accent-orange', '#f97316') },
+            ]}
+          />
+        </ChartPanel>
+
+        <ChartPanel title={t('dashboard.settlementMix')} description={t('dashboard.settlementMixDescription')}>
+          <DonutChart data={vm.settlementMix} centerLabel={t('dashboard.activeRoutes')} centerValue={formatNumber(vm.activeDsrs)} valueFormatter={(value) => `${formatNumber(value)} ${t('common.dsr')}`} />
+        </ChartPanel>
+      </div>
+
+      <div className="mt-6">
+        <ChartPanel title={t('dashboard.activityHeatmap')} description={t('dashboard.activityHeatmapDescription')}>
+          <ActivityHeatmap cells={vm.activityHeatmap} color={getCssVar('--secondary', '#2563eb')} />
+        </ChartPanel>
+      </div>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-3">
+        <ChartPanel title={t('dashboard.inventoryByCategory')} description={t('dashboard.inventoryByCategoryDescription')}>
+          {vm.inventoryByCategory.length ? <HorizontalBarChart data={vm.inventoryByCategory.slice(0, 6)} valueFormatter={formatCurrency} /> : <EmptyState title={t('dashboard.noInventoryTitle')} description={t('dashboard.noInventoryDescription')} icon={Boxes} />}
+        </ChartPanel>
+
+        <ChartPanel title={t('dashboard.routePerformance')} description={t('dashboard.routePerformanceDescription')}>
+          {vm.routePerformance.length ? (
+            <StackedBarChart
+              data={vm.routePerformance}
+              segments={[
+                { key: 'issued', label: t('reports.issued'), color: getCssVar('--issued-soft', '#bfdbfe') },
+                { key: 'returned', label: t('reports.returned'), color: getCssVar('--returned', '#fdba74') },
+                { key: 'sold', label: t('reports.sold'), color: getCssVar('--success', '#0f766e') },
+              ]}
+              totalFormatter={(value) => `${formatNumber(value)} pcs`}
+            />
+          ) : (
+            <EmptyState title={t('dashboard.noRouteMovementTitle')} description={t('dashboard.noRouteMovementDescription')} icon={Truck} />
+          )}
+        </ChartPanel>
+
+        <ChartPanel title={t('dashboard.topProductsByCash')} description={t('dashboard.topProductsByCashDescription')}>
+          {vm.topPayableProducts.length ? <HorizontalBarChart data={vm.topPayableProducts} valueFormatter={formatCurrency} trackClassName="bg-emerald-50" /> : <EmptyState title={t('dashboard.noSoldProductsTitle')} description={t('dashboard.noSoldProductsDescription')} icon={PackageCheck} />}
+        </ChartPanel>
+      </div>
+
+      <div className="mt-6 overflow-hidden rounded-[34px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(244,247,251,0.96))] shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
         <div className="grid gap-8 p-5 text-slate-950 lg:grid-cols-[1.15fr_0.85fr] lg:p-8">
           <div className="flex flex-col justify-between gap-7">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-blue-700">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[var(--secondary-soft)] bg-[var(--secondary-soft)] px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-[var(--secondary-strong)]">
                 <CheckCircle2 size={14} />
                 {t('dashboard.liveTrading')}
               </div>
@@ -36,7 +105,11 @@ export default function DashboardPage() {
               <p className="mt-3 max-w-2xl text-sm font-medium leading-7 text-slate-500">{t('dashboard.heroDescription')}</p>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
-              {vm.operationalPulse.map((item) => (
+              <div className="flex flex-col items-center justify-center rounded-[26px] border border-slate-200 bg-white/85 px-4 py-4 text-center shadow-[0_12px_26px_rgba(15,23,42,0.05)]">
+                <RadialProgressChart value={vm.completionRate} label={t('dashboard.collectionFlow')} color={getCssVar('--secondary', '#2563eb')} size={132} />
+                <p className="mt-2 text-sm font-medium leading-6 text-slate-500">{t('dashboard.collectionFlowDesc')}</p>
+              </div>
+              {vm.operationalPulse.slice(1).map((item) => (
                 <div key={item.title} className="rounded-[26px] border border-slate-200 bg-white/85 px-4 py-4 shadow-[0_12px_26px_rgba(15,23,42,0.05)]">
                   <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">{item.title}</p>
                   <p className="mt-2 text-3xl font-black tracking-tight text-slate-950">{item.value}</p>
@@ -80,12 +153,12 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title={t('dashboard.products')} value={formatNumber(products.length)} helper={t('dashboard.productsHelper')} icon={Boxes} tone="blue" />
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard title={t('dashboard.products')} value={formatNumber(productDirectory.length)} helper={t('dashboard.productsHelper')} icon={Boxes} tone="blue" />
         <StatCard title={t('dashboard.salesValueInStock')} value={formatCurrency(vm.stockSellingValue)} helper={t('dashboard.salesValueInStockHelper')} icon={CircleDollarSign} tone="emerald" />
-        <StatCard title={t('dashboard.issuedToday')} value={`${formatNumber(vm.totalIssuedToday)} ${t('common.pcs')}`} helper={t('dashboard.issuedTodayHelper')} icon={Truck} tone="amber" />
+        <StatCard title={t('dashboard.issuedToday')} value={`${formatNumber(vm.totalIssuedToday)} ${t('common.pcs')}`} helper={t('dashboard.issuedTodayHelper')} icon={Truck} tone="amber" trend={vm.tradingTrend.map((day) => day.issued)} />
         <StatCard title={t('dashboard.returnedToday')} value={`${formatNumber(vm.totalReturnedToday)} ${t('common.pcs')}`} helper={t('dashboard.returnedTodayHelper')} icon={RotateCcw} tone="slate" />
-        <StatCard title={t('dashboard.soldToday')} value={`${formatNumber(vm.totalSoldToday)} ${t('common.pcs')}`} helper={t('dashboard.soldTodayHelper')} icon={PackageCheck} tone="emerald" />
+        <StatCard title={t('dashboard.soldToday')} value={`${formatNumber(vm.totalSoldToday)} ${t('common.pcs')}`} helper={t('dashboard.soldTodayHelper')} icon={PackageCheck} tone="emerald" trend={vm.tradingTrend.map((day) => day.sold)} />
         <StatCard title={t('dashboard.pendingReturn')} value={`${formatNumber(vm.pendingRows.length)} ${t('common.dsr')}`} helper={t('dashboard.pendingReturnHelper')} icon={AlertTriangle} tone={vm.pendingRows.length ? 'amber' : 'emerald'} />
         <StatCard title={t('dashboard.completedSettlement')} value={`${formatNumber(vm.completedRows.length)} ${t('common.dsr')}`} helper={t('dashboard.completedSettlementHelper', { percent: vm.completionRate })} icon={CheckCircle2} tone="blue" />
         <StatCard title={t('dashboard.lowStock')} value={formatNumber(vm.lowStockAll.length)} helper={t('dashboard.lowStockHelper', { count: vm.outOfStockCount })} icon={AlertTriangle} tone={vm.lowStockAll.length ? 'rose' : 'emerald'} />
@@ -97,7 +170,7 @@ export default function DashboardPage() {
           return (
             <div key={task.title} className="surface rounded-[28px] p-5">
               <div className="flex items-start gap-3">
-                <div className={cx('rounded-2xl p-2.5', task.tone === 'emerald' && 'bg-emerald-50 text-emerald-700', task.tone === 'amber' && 'bg-amber-50 text-amber-700', task.tone === 'rose' && 'bg-rose-50 text-rose-700', task.tone === 'blue' && 'bg-blue-50 text-blue-700', task.tone === 'slate' && 'bg-slate-100 text-slate-700')}>
+                <div className={cx('rounded-2xl p-2.5', task.tone === 'emerald' && 'bg-emerald-50 text-emerald-700', task.tone === 'amber' && 'bg-amber-50 text-amber-700', task.tone === 'rose' && 'bg-rose-50 text-rose-700', task.tone === 'blue' && 'bg-[var(--secondary-soft)] text-[var(--secondary-strong)]', task.tone === 'slate' && 'bg-slate-100 text-slate-700')}>
                   <Icon size={20} />
                 </div>
                 <div>
@@ -108,50 +181,6 @@ export default function DashboardPage() {
             </div>
           );
         })}
-      </div>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <ChartPanel title={t('dashboard.tradingTrend')} description={t('dashboard.tradingTrendDescription')}>
-          <TrendChart
-            data={vm.tradingTrend}
-            valueFormatter={formatCurrency}
-            series={[
-              { key: 'paid', label: t('dashboard.payableToday'), color: '#0f766e', fill: 'rgba(15,118,110,0.14)' },
-              { key: 'issued', label: t('reports.issued'), color: '#2563eb' },
-              { key: 'sold', label: t('reports.sold'), color: '#f97316' },
-            ]}
-          />
-        </ChartPanel>
-
-        <ChartPanel title={t('dashboard.settlementMix')} description={t('dashboard.settlementMixDescription')}>
-          <DonutChart data={vm.settlementMix} centerLabel={t('dashboard.activeRoutes')} centerValue={formatNumber(vm.activeDsrs)} valueFormatter={(value) => `${formatNumber(value)} ${t('common.dsr')}`} />
-        </ChartPanel>
-      </div>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <ChartPanel title={t('dashboard.inventoryByCategory')} description={t('dashboard.inventoryByCategoryDescription')}>
-          {vm.inventoryByCategory.length ? <HorizontalBarChart data={vm.inventoryByCategory.slice(0, 6)} valueFormatter={formatCurrency} /> : <EmptyState title={t('dashboard.noInventoryTitle')} description={t('dashboard.noInventoryDescription')} icon={Boxes} />}
-        </ChartPanel>
-
-        <ChartPanel title={t('dashboard.routePerformance')} description={t('dashboard.routePerformanceDescription')}>
-          {vm.routePerformance.length ? (
-            <StackedBarChart
-              data={vm.routePerformance}
-              segments={[
-                { key: 'issued', label: t('reports.issued'), color: '#bfdbfe' },
-                { key: 'returned', label: t('reports.returned'), color: '#fdba74' },
-                { key: 'sold', label: t('reports.sold'), color: '#0f766e' },
-              ]}
-              totalFormatter={(value) => `${formatNumber(value)} pcs`}
-            />
-          ) : (
-            <EmptyState title={t('dashboard.noRouteMovementTitle')} description={t('dashboard.noRouteMovementDescription')} icon={Truck} />
-          )}
-        </ChartPanel>
-
-        <ChartPanel title={t('dashboard.topProductsByCash')} description={t('dashboard.topProductsByCashDescription')}>
-          {vm.topPayableProducts.length ? <HorizontalBarChart data={vm.topPayableProducts} valueFormatter={formatCurrency} trackClassName="bg-emerald-50" /> : <EmptyState title={t('dashboard.noSoldProductsTitle')} description={t('dashboard.noSoldProductsDescription')} icon={PackageCheck} />}
-        </ChartPanel>
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">

@@ -1,10 +1,60 @@
 import { useEffect, useMemo, useState } from 'react';
+import { inventoryApi } from '../../../services/inventoryApi';
 import { buildDailyRows, buildSheetData } from '../../../models/inventoryViewData.js';
+import { getCssVar } from '../../../utils/theme.js';
 
-export function useDailyReportsViewModel({ products, dsrs, issues, settlements, today, t }) {
+const DAY_SCOPE_PAGE_SIZE = 100;
+
+export function useDailyReportsViewModel({ products, dsrs, today, t }) {
   const [date, setDate] = useState(today);
   const [selectedSheet, setSelectedSheet] = useState(null);
-  const rows = useMemo(() => buildDailyRows({ date, dsrs, issues, settlements, products }), [date, dsrs, issues, settlements, products]);
+  const [dayIssues, setDayIssues] = useState([]);
+  const [daySettlements, setDaySettlements] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!date) {
+      return undefined;
+    }
+
+    async function load() {
+      try {
+        setLoading(true);
+        setError('');
+        const [issuesResult, settlementsResult] = await Promise.all([
+          inventoryApi.listIssues({ dateFrom: date, dateTo: date, pageSize: DAY_SCOPE_PAGE_SIZE }),
+          inventoryApi.listSettlements({ dateFrom: date, dateTo: date, pageSize: DAY_SCOPE_PAGE_SIZE }),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setDayIssues(issuesResult.items || []);
+        setDaySettlements(settlementsResult.items || []);
+      } catch (requestError) {
+        if (!cancelled) {
+          setError(requestError.message);
+          setDayIssues([]);
+          setDaySettlements([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [date]);
+
+  const rows = useMemo(() => buildDailyRows({ date, dsrs, issues: dayIssues, settlements: daySettlements, products }), [date, dsrs, dayIssues, daySettlements, products]);
   const totals = rows.reduce(
     (sum, row) => ({
       issuedPieces: sum.issuedPieces + row.issuedPieces,
@@ -27,9 +77,9 @@ export function useDailyReportsViewModel({ products, dsrs, issues, settlements, 
       totalPayable: row.totalPayable,
     }));
   const reportMix = [
-    { label: t('dashboard.completed'), value: rows.filter((row) => row.status === 'Completed').length, color: '#0f766e' },
-    { label: t('dashboard.pending'), value: rows.filter((row) => row.status === 'Pending').length, color: '#f59e0b' },
-    { label: t('dashboard.noIssue'), value: rows.filter((row) => row.status === 'No Issue').length, color: '#cbd5e1' },
+    { label: t('dashboard.completed'), value: rows.filter((row) => row.status === 'Completed').length, color: getCssVar('--success', '#0f766e') },
+    { label: t('dashboard.pending'), value: rows.filter((row) => row.status === 'Pending').length, color: getCssVar('--warning', '#f59e0b') },
+    { label: t('dashboard.noIssue'), value: rows.filter((row) => row.status === 'No Issue').length, color: getCssVar('--muted', '#cbd5e1') },
   ];
 
   useEffect(() => {
@@ -41,12 +91,14 @@ export function useDailyReportsViewModel({ products, dsrs, issues, settlements, 
       return;
     }
 
-    setSelectedSheet(buildSheetData({ date, dsrId: row.dsrId, dsrs, issues, settlements, products }));
+    setSelectedSheet(buildSheetData({ date, dsrId: row.dsrId, dsrs, issues: dayIssues, settlements: daySettlements, products }));
   }
 
   return {
     date,
     setDate,
+    loading,
+    error,
     rows,
     totals,
     chartRows,

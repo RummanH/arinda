@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { MapPin, Pencil, Phone, Plus, Search, Trash2, Users } from 'lucide-react';
-import { Badge, EmptyState, SectionHeader } from '../../../components/ui.jsx';
+import { Alert, Badge, EmptyState, Pagination, SectionHeader, TableSkeleton } from '../../../components/ui.jsx';
 import { statusTone } from '../../../models/inventoryViewData.js';
 import { useInventoryApp } from '../../../app/useInventoryApp.jsx';
 import { formatNumber } from '../../../utils/calculations.js';
@@ -8,8 +8,8 @@ import DsrFormModal from '../components/DsrFormModal';
 import { useDsrViewModel } from '../viewmodels/useDsrViewModel';
 
 export default function DsrPage() {
-  const { dsrs, issues, settlements, today, saveDsr, deleteDsr, t, can } = useInventoryApp();
-  const vm = useDsrViewModel({ dsrs, issues, settlements, today });
+  const { today, saveDsr, deleteDsr, t, can } = useInventoryApp();
+  const vm = useDsrViewModel({ today });
   const [dsrModal, setDsrModal] = useState(null);
   const canManageDsrs = can('manage_dsrs');
 
@@ -35,7 +35,7 @@ export default function DsrPage() {
               <p className="text-sm font-medium text-slate-500">{t('dsr.description')}</p>
             </div>
             <div className="flex flex-wrap gap-2 text-sm font-bold">
-              <span className="muted-chip">{formatNumber(dsrs.length)} {t('common.dsr')}</span>
+              <span className="muted-chip">{formatNumber(vm.total)} {t('common.dsr')}</span>
               <span className="muted-chip">{formatNumber(vm.inProgressDsrIds.size)} {t('dsr.inProgress')}</span>
             </div>
           </div>
@@ -44,6 +44,15 @@ export default function DsrPage() {
             <input className="input pl-10" value={vm.search} onChange={(event) => vm.setSearch(event.target.value)} placeholder={t('dsr.searchPlaceholder')} />
           </div>
         </div>
+        {vm.loading ? (
+          <div className="p-5">
+            <TableSkeleton columns={6} showHeader={false} />
+          </div>
+        ) : vm.error ? (
+          <div className="p-5">
+            <Alert type="error">{vm.error}</Alert>
+          </div>
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="table-head">
@@ -57,9 +66,9 @@ export default function DsrPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {vm.filteredDsrs.map((dsr, index) => (
+              {vm.items.map((dsr, index) => (
                 <tr key={dsr.id} className="hover:bg-slate-50">
-                  <td className="table-cell font-black text-slate-400">{index + 1}</td>
+                  <td className="table-cell font-black text-slate-400">{(vm.page - 1) * vm.pageSize + index + 1}</td>
                   <td className="table-cell font-semibold text-slate-950">
                     <div className="flex items-center gap-2">
                       <span>{dsr.name}</span>
@@ -105,9 +114,15 @@ export default function DsrPage() {
             </tbody>
           </table>
         </div>
-        {!vm.filteredDsrs.length ? (
+        )}
+        {!vm.loading && !vm.error && !vm.items.length ? (
           <div className="p-5">
             <EmptyState title={t('dsr.noMatchTitle')} description={t('dsr.noMatchDescription')} icon={Users} />
+          </div>
+        ) : null}
+        {!vm.loading && !vm.error && vm.items.length ? (
+          <div className="border-t border-slate-100 px-5 py-4">
+            <Pagination page={vm.page} totalPages={vm.totalPages} onPageChange={vm.setPage} />
           </div>
         ) : null}
       </div>

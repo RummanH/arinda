@@ -1,5 +1,6 @@
 import { createId } from '../lib/ids.js';
-import { insertActivityLog, listActivityLogs } from '../repositories/activityLogRepository.js';
+import { buildPageResult, parsePagination } from '../lib/pagination.js';
+import { countActivityLogs, insertActivityLog, listActivityLogsPage } from '../repositories/activityLogRepository.js';
 
 export class AuditService {
   constructor(databaseManager) {
@@ -23,10 +24,18 @@ export class AuditService {
     });
   }
 
-  async list(limit = 100) {
+  async list(query = {}) {
+    const { page, pageSize, limit, offset } = parsePagination(query);
+    const search = String(query.search || '').trim();
+
     const client = await this.databaseManager.getPool().connect();
     try {
-      return await listActivityLogs(client, limit);
+      const [items, total] = await Promise.all([
+        listActivityLogsPage(client, { search, limit, offset }),
+        countActivityLogs(client, { search }),
+      ]);
+
+      return buildPageResult({ items, total, page, pageSize });
     } finally {
       client.release();
     }

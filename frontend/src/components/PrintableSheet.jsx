@@ -96,7 +96,7 @@ export default function PrintableSheet({ sheet, printTarget = false, targetId })
         </table>
       </div>
 
-      <div className="mt-6 grid gap-3 text-sm sm:grid-cols-4">
+      <div className="mt-6 grid gap-3 text-sm sm:grid-cols-3">
         <div className="rounded-lg border border-slate-200 px-4 py-3">
           <p className="text-xs font-bold uppercase text-slate-500">Previous Due</p>
           <p className="mt-1 font-bold text-slate-950">{formatCurrency(sheet.previousDue || 0)}</p>
@@ -106,8 +106,20 @@ export default function PrintableSheet({ sheet, printTarget = false, targetId })
           <p className="mt-1 font-bold text-slate-950">{formatCurrency(sheet.totalPayable)}</p>
         </div>
         <div className="rounded-lg border border-slate-200 px-4 py-3">
+          <p className="text-xs font-bold uppercase text-slate-500">Discount</p>
+          <p className="mt-1 font-bold text-slate-950">- {formatCurrency(sheet.discount || 0)}</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 px-4 py-3">
+          <p className="text-xs font-bold uppercase text-slate-500">Extra Return</p>
+          <p className="mt-1 font-bold text-slate-950">- {formatCurrency(sheet.extraReturnValue || 0)}</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 px-4 py-3">
           <p className="text-xs font-bold uppercase text-slate-500">Amount Paid</p>
           <p className="mt-1 font-bold text-slate-950">{formatCurrency(sheet.amountPaid || 0)}</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 px-4 py-3">
+          <p className="text-xs font-bold uppercase text-slate-500">Today Due</p>
+          <p className="mt-1 font-bold text-slate-950">{formatCurrency(sheet.todayDue || 0)}</p>
         </div>
         <div className="rounded-lg border border-slate-200 px-4 py-3">
           <p className="text-xs font-bold uppercase text-slate-500">Due</p>

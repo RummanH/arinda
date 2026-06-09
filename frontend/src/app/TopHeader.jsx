@@ -23,11 +23,11 @@ export default function TopHeader({ title, today, user, language, onLanguageChan
             {t('status.liveData')}
           </div>
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-sm font-bold text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
-            <CalendarDays size={17} className="text-blue-600" />
+            <CalendarDays size={17} className="text-[var(--secondary)]" />
             {formatDate(today)}
           </div>
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-sm font-bold text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
-            <UserCircle size={17} className="text-blue-700" />
+            <UserCircle size={17} className="text-[var(--secondary-strong)]" />
             <span className="max-w-44 truncate">{user?.name}</span>
           </div>
           <button type="button" className="icon-btn" title={t('auth.logout')} onClick={onLogout}>

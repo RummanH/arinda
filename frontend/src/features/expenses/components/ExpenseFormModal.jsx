@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Save } from 'lucide-react';
 import { Alert, Modal } from '../../../components/ui.jsx';
+import { DatePickerField } from '../../../components/date-picker.jsx';
 import { useInventoryApp } from '../../../app/useInventoryApp.jsx';
 
 const EXPENSE_CATEGORY_KEYS = [
@@ -76,7 +77,7 @@ export default function ExpenseFormModal({ expense, defaultDate, onClose, onSave
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <label className="label">{t('expenses.date')}</label>
-            <input className="input" type="date" value={form.date} onChange={(event) => updateField('date', event.target.value)} />
+            <DatePickerField value={form.date} onChange={(value) => updateField('date', value)} />
           </div>
           <div>
             <label className="label">{t('expenses.category')}</label>
@@ -110,4 +111,3 @@ export default function ExpenseFormModal({ expense, defaultDate, onClose, onSave
     </Modal>
   );
 }
-

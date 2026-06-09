@@ -29,23 +29,23 @@ export default function LoginPage() {
     <div className="page-shell">
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       <div className="relative h-screen overflow-x-hidden overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.08),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(15,23,42,0.06),transparent_24%)]">
-        <div className="pointer-events-none absolute left-[-8rem] top-20 h-72 w-72 rounded-full bg-blue-200/20 blur-3xl" />
+        <div className="pointer-events-none absolute left-[-8rem] top-20 h-72 w-72 rounded-full bg-[var(--secondary-soft)] blur-3xl" />
         <div className="pointer-events-none absolute right-[-5rem] top-1/3 h-64 w-64 rounded-full bg-slate-200/60 blur-3xl" />
         <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
           <LanguageSwitcher language={language} onChange={setLanguage} t={t} />
         </div>
         <div className="mx-auto flex min-h-screen w-full max-w-7xl items-center px-4 py-8 sm:px-6 lg:px-8">
           <div className="grid w-full gap-6 lg:grid-cols-[1.08fr_0.92fr] lg:items-stretch">
-            <section className="relative hidden min-h-[660px] overflow-hidden rounded-[36px] border border-slate-200 bg-[#ece7e0] p-4 shadow-[0_24px_70px_rgba(15,23,42,0.2)] lg:block">
-              <div className="h-full w-full overflow-hidden rounded-[28px] bg-[#ece7e0]">
+            <section className="relative hidden min-h-[660px] overflow-hidden rounded-[36px] border border-slate-200 bg-[var(--login-hero-bg)] p-4 shadow-[0_24px_70px_rgba(15,23,42,0.2)] lg:block">
+              <div className="h-full w-full overflow-hidden rounded-[28px] bg-[var(--login-hero-bg)]">
                 <img src={loginHero} alt="" className="h-full w-full object-contain object-center" />
               </div>
             </section>
 
             <section className="panel-strong relative w-full overflow-hidden p-6 sm:p-8 lg:flex lg:min-h-[660px] lg:flex-col lg:justify-center">
-              <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-blue-50 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[var(--secondary-soft)] to-transparent" />
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--secondary-soft)] text-[var(--secondary-strong)] ring-1 ring-[var(--secondary-soft)]">
                   <KeyRound size={22} />
                 </div>
                 <div>

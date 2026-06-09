@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -21,13 +21,40 @@
     --brand: #2563eb;
     --brand-strong: #1d4ed8;
     --brand-soft: rgba(37, 99, 235, 0.08);
+    /* Secondary aliases to treat brand as secondary token */
+    --secondary: var(--brand);
+    --secondary-strong: var(--brand-strong);
+    --secondary-soft: var(--brand-soft);
+    --secondary-shadow: rgba(37, 99, 235, 0.24);
+    --secondary-shadow-strong: rgba(37, 99, 235, 0.3);
+    /* Additional design tokens for theming and chart palettes */
+    --bg-dark: #0f172a;
+    --login-hero-bg: #ece7e0;
+    --bg-grad-start: #f8fbff;
+    --bg-grad-mid: #f2f6fb;
+    --bg-grad-end: #eef3f8;
+    --chart-tooltip-title: #f8fafc;
+    --chart-tooltip-body: #e2e8f0;
+    --chart-grid: rgba(148,163,184,0.16);
+    --tick-color: #475569;
+    --success: #0f766e;
+    --warning: #f59e0b;
+    --accent-orange: #f97316;
+    --purple: #7c3aed;
+    --danger: #dc2626;
+    --teal: #0891b2;
+    --rose: #e11d48;
+    --surface-white: #ffffff;
+    /* Muted/highlight small accents */
+    --muted: #cbd5e1;
+    --highlight: #94a3b8;
     --text-strong: #08111f;
     --text-soft: #52607a;
   }
 
   html {
     height: 100%;
-    font-family: 'Nunito', 'Segoe UI Variable', 'Segoe UI', 'Avenir Next', 'Trebuchet MS', sans-serif;
+    font-family: 'Inter', 'Segoe UI Variable', 'Segoe UI', 'Avenir Next', 'Trebuchet MS', sans-serif;
   }
 
   body {
@@ -39,7 +66,7 @@
     background:
       radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 30%),
       radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 24%),
-      linear-gradient(180deg, #f8fbff 0%, #f2f6fb 52%, #eef3f8 100%);
+      linear-gradient(180deg, var(--bg-grad-start) 0%, var(--bg-grad-mid) 52%, var(--bg-grad-end) 100%);
     color: var(--text-strong);
   }
 
@@ -66,14 +93,14 @@
   }
 
   ::selection {
-    background: rgba(37, 99, 235, 0.14);
+    background: var(--secondary-soft);
     color: var(--text-strong);
   }
 }
 
 @layer components {
   .input {
-    @apply h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 shadow-[0_1px_0_rgba(15,23,42,0.03)] outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400;
+    @apply h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 shadow-[0_1px_0_rgba(15,23,42,0.03)] outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-[var(--secondary)] focus:bg-white focus:ring-4 focus:ring-[var(--secondary-soft)] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400;
   }
 
   .label {
@@ -81,7 +108,7 @@
   }
 
   .btn-primary {
-    @apply inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#1d4ed8,#2563eb)] px-4 text-sm font-bold text-white shadow-[0_14px_28px_rgba(37,99,235,0.24)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(37,99,235,0.3)] active:translate-y-0 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none disabled:hover:translate-y-0;
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,var(--secondary-strong),var(--secondary))] px-4 text-sm font-bold text-white shadow-[0_14px_28px_var(--secondary-shadow)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_34px_var(--secondary-shadow-strong)] active:translate-y-0 focus:outline-none focus:ring-4 focus:ring-[var(--secondary-soft)] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none disabled:hover:translate-y-0;
   }
 
   .btn-secondary {
@@ -137,7 +164,7 @@
   }
 
   .brand-chip {
-    @apply inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-blue-700;
+    @apply inline-flex items-center gap-2 rounded-full border-[var(--secondary-soft)] bg-[var(--secondary-soft)] px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--secondary-strong)];
   }
 
   .muted-chip {
@@ -145,7 +172,7 @@
   }
 
   .premium-scrollbar {
-    scrollbar-color: #cbd5e1 transparent;
+    scrollbar-color: var(--muted) transparent;
     scrollbar-width: thin;
   }
 
@@ -157,17 +184,17 @@
   .premium-scrollbar::-webkit-scrollbar-thumb {
     border: 3px solid transparent;
     border-radius: 999px;
-    background: #cbd5e1;
+    background: var(--muted);
     background-clip: padding-box;
   }
 
   .premium-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+    background: var(--highlight);
     background-clip: padding-box;
   }
 
   .surface .overflow-x-auto {
-    scrollbar-color: #cbd5e1 transparent;
+    scrollbar-color: var(--muted) transparent;
     scrollbar-width: thin;
   }
 
@@ -179,7 +206,7 @@
   .surface .overflow-x-auto::-webkit-scrollbar-thumb {
     border: 3px solid transparent;
     border-radius: 999px;
-    background: #cbd5e1;
+    background: var(--muted);
     background-clip: padding-box;
   }
 

@@ -1,21 +1,4 @@
-import { assert } from '../lib/errors.js';
-
-function normalizeMonth(value, fallback) {
-  const raw = String(value || '').trim();
-  if (!raw) {
-    return fallback;
-  }
-
-  assert(/^\d{4}-\d{2}$/.test(raw), 'Month must be in YYYY-MM format.');
-  return raw;
-}
-
-function startOfNextMonth(month) {
-  const [year, monthPart] = month.split('-').map(Number);
-  const next = new Date(Date.UTC(year, monthPart - 1, 1));
-  next.setUTCMonth(next.getUTCMonth() + 1);
-  return next.toISOString().slice(0, 10);
-}
+import { normalizeIsoMonth, startOfMonth, startOfNextMonth } from '../lib/dateRanges.js';
 
 function sumByDsr(rows, amountKey, dateKey = null) {
   const map = new Map();
@@ -76,8 +59,8 @@ export class MonthEndSummaryService {
   }
 
   async getSummary(query = {}) {
-    const month = normalizeMonth(query.month, new Date().toISOString().slice(0, 7));
-    const monthStart = `${month}-01`;
+    const month = normalizeIsoMonth(query.month, new Date().toISOString().slice(0, 7));
+    const monthStart = startOfMonth(month);
     const nextMonthStart = startOfNextMonth(month);
 
     const client = await this.databaseManager.getPool().connect();

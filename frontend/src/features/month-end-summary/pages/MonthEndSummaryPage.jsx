@@ -1,24 +1,19 @@
 import { useMemo } from 'react';
 import { BarChart3, BadgeDollarSign, Coins, ReceiptText, TrendingUp } from 'lucide-react';
 import { Alert, ChartPanel, EmptyState, LoadingState, SectionHeader, HorizontalBarChart, StatCard, TableSkeleton } from '../../../components/ui.jsx';
+import { MonthPickerField } from '../../../components/date-picker.jsx';
 import { useInventoryApp } from '../../../app/useInventoryApp.jsx';
 import { formatCurrency, formatNumber } from '../../../utils/calculations.js';
+import { toBarChartData } from '../../../utils/charts.js';
 import { useMonthEndSummaryViewModel } from '../viewmodels/useMonthEndSummaryViewModel';
 
-function toChartData(rows = []) {
-  return rows.map((row, index) => ({
-    label: row.dsrName,
-    value: Number(row.netBalance || 0),
-    meta: row.dsrArea || row.dsrPhone || '',
-    color: index % 2 === 0 ? '#0f766e' : '#2563eb',
-  }));
-}
+const CHART_FIELDS = { labelField: 'dsrName', valueField: 'netBalance', metaFields: ['dsrArea', 'dsrPhone'] };
 
 export default function MonthEndSummaryPage() {
   const { t } = useInventoryApp();
   const vm = useMonthEndSummaryViewModel();
   const rows = vm.report?.rows || [];
-  const chartData = useMemo(() => toChartData(rows.slice(0, 8)), [rows]);
+  const chartData = useMemo(() => toBarChartData(rows.slice(0, 8), CHART_FIELDS), [rows]);
 
   if (vm.loading) {
     return (
@@ -67,7 +62,7 @@ export default function MonthEndSummaryPage() {
       <div className="mb-6 grid gap-4 lg:grid-cols-[320px_1fr]">
         <div className="surface rounded-[28px] p-5">
           <label className="label mt-3">{t('monthEndSummary.reportMonth')}</label>
-          <input className="input" type="month" value={vm.month} onChange={(event) => vm.setMonth(event.target.value)} />
+          <MonthPickerField value={vm.month} onChange={vm.setMonth} />
           <p className="mt-3 text-sm text-slate-500">{t('monthEndSummary.helper')}</p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

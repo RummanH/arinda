@@ -1,16 +1,27 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { inventoryApi } from '../../../services/inventoryApi';
+import { usePagination } from '../../../hooks/usePagination';
 
-function normalizeText(value) {
-  return String(value || '').trim().toLowerCase();
-}
+const SEARCH_DEBOUNCE_MS = 300;
 
 export function useActivityLogsViewModel() {
-  const [limit, setLimit] = useState(100);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const { page, setPage, pageSize, resetPage } = usePagination();
   const [logs, setLogs] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      resetPage();
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timeoutId);
+  }, [search, resetPage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -19,14 +30,18 @@ export function useActivityLogsViewModel() {
       try {
         setLoading(true);
         setError('');
-        const result = await inventoryApi.listActivityLogs(limit);
+        const result = await inventoryApi.listActivityLogs({ page, pageSize, search: debouncedSearch });
         if (!cancelled) {
-          setLogs(result.logs || []);
+          setLogs(result.items || []);
+          setTotal(result.total || 0);
+          setTotalPages(result.totalPages || 0);
         }
       } catch (requestError) {
         if (!cancelled) {
           setError(requestError.message);
           setLogs([]);
+          setTotal(0);
+          setTotalPages(0);
         }
       } finally {
         if (!cancelled) {
@@ -39,36 +54,17 @@ export function useActivityLogsViewModel() {
     return () => {
       cancelled = true;
     };
-  }, [limit]);
-
-  const filteredLogs = useMemo(() => {
-    const query = normalizeText(search);
-    if (!query) {
-      return logs;
-    }
-
-    return logs.filter((log) => {
-      const metadataText = JSON.stringify(log.metadata || {});
-      return [
-        log.userName,
-        log.userEmail,
-        log.userRole,
-        log.actionType,
-        log.entityType,
-        log.entityId,
-        log.description,
-        metadataText,
-      ].some((value) => normalizeText(value).includes(query));
-    });
-  }, [logs, search]);
+  }, [page, pageSize, debouncedSearch]);
 
   return {
-    limit,
-    setLimit,
     search,
     setSearch,
     logs,
-    filteredLogs,
+    total,
+    page,
+    pageSize,
+    totalPages,
+    setPage,
     loading,
     error,
   };

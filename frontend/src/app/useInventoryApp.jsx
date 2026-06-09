@@ -44,10 +44,8 @@ export function InventoryAppProvider({ children }) {
   const [language, setLanguageState] = useState(getInitialLanguage);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [products, setProducts] = useState([]);
-  const [dsrs, setDsrs] = useState([]);
-  const [issues, setIssues] = useState([]);
-  const [settlements, setSettlements] = useState([]);
+  const [productDirectory, setProductDirectory] = useState([]);
+  const [dsrDirectory, setDsrDirectory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [toasts, setToasts] = useState([]);
@@ -112,18 +110,44 @@ export function InventoryAppProvider({ children }) {
     });
   }
 
-  function applyState(nextState) {
-    setProducts(nextState.products || []);
-    setDsrs(nextState.dsrs || []);
-    setIssues(nextState.issues || []);
-    setSettlements(nextState.settlements || []);
+  function upsertProductDirectory(product) {
+    setProductDirectory((current) => {
+      const next = current.some((item) => item.id === product.id)
+        ? current.map((item) => (item.id === product.id ? product : item))
+        : [...current, product];
+      return next.sort((a, b) => a.name.localeCompare(b.name));
+    });
+  }
+
+  function removeFromProductDirectory(productId) {
+    setProductDirectory((current) => current.filter((item) => item.id !== productId));
+  }
+
+  function upsertDsrDirectory(dsr) {
+    setDsrDirectory((current) => {
+      const next = current.some((item) => item.id === dsr.id)
+        ? current.map((item) => (item.id === dsr.id ? dsr : item))
+        : [...current, dsr];
+      return next.sort((a, b) => a.name.localeCompare(b.name));
+    });
+  }
+
+  function removeFromDsrDirectory(dsrId) {
+    setDsrDirectory((current) => current.filter((item) => item.id !== dsrId));
+  }
+
+  async function refreshProductDirectory() {
+    try {
+      const result = await inventoryApi.getProductsDirectory();
+      setProductDirectory(result.products || []);
+    } catch {
+      // Best effort - the directory will catch up on the next full refresh.
+    }
   }
 
   function resetInventoryState() {
-    setProducts([]);
-    setDsrs([]);
-    setIssues([]);
-    setSettlements([]);
+    setProductDirectory([]);
+    setDsrDirectory([]);
   }
 
   function handleUnauthorized() {
@@ -137,7 +161,12 @@ export function InventoryAppProvider({ children }) {
     try {
       setLoading(true);
       setLoadError('');
-      applyState(await inventoryApi.getState());
+      const [productsResult, dsrsResult] = await Promise.all([
+        inventoryApi.getProductsDirectory(),
+        inventoryApi.getDsrsDirectory(),
+      ]);
+      setProductDirectory(productsResult.products || []);
+      setDsrDirectory(dsrsResult.dsrs || []);
     } catch (error) {
       if (error.status === 401) {
         handleUnauthorized();
@@ -205,8 +234,8 @@ export function InventoryAppProvider({ children }) {
 
   async function saveProduct(product) {
     try {
-      const state = product.id ? await inventoryApi.updateProduct(product) : await inventoryApi.createProduct(product);
-      applyState(state);
+      const result = product.id ? await inventoryApi.updateProduct(product) : await inventoryApi.createProduct(product);
+      upsertProductDirectory(result.product);
       pushToast('success', product.id ? t('products.editTitle') : t('products.addTitle'), `${product.name} ${product.id ? t('alerts.updated') : t('alerts.created')}`);
       return { ok: true };
     } catch (error) {
@@ -228,7 +257,8 @@ export function InventoryAppProvider({ children }) {
     }
 
     try {
-      applyState(await inventoryApi.deleteProduct(product.id));
+      await inventoryApi.deleteProduct(product.id);
+      removeFromProductDirectory(product.id);
       pushToast('success', t('common.delete'), `${product.name} ${t('alerts.deleted')}`);
       return { ok: true };
     } catch (error) {
@@ -240,7 +270,8 @@ export function InventoryAppProvider({ children }) {
 
   async function addStock(productId, addPieces) {
     try {
-      applyState(await inventoryApi.addProductStock(productId, addPieces));
+      const result = await inventoryApi.addProductStock(productId, addPieces);
+      upsertProductDirectory(result.product);
       pushToast('success', t('products.updateStock'), t('products.stockUpdateSuccess'));
       return { ok: true };
     } catch (error) {
@@ -252,8 +283,8 @@ export function InventoryAppProvider({ children }) {
 
   async function saveDsr(dsr) {
     try {
-      const state = dsr.id ? await inventoryApi.updateDsr(dsr) : await inventoryApi.createDsr(dsr);
-      applyState(state);
+      const result = dsr.id ? await inventoryApi.updateDsr(dsr) : await inventoryApi.createDsr(dsr);
+      upsertDsrDirectory(result.dsr);
       pushToast('success', dsr.id ? t('dsr.editTitle') : t('dsr.addTitle'), `${dsr.name} ${dsr.id ? t('alerts.updated') : t('alerts.created')}`);
       return { ok: true };
     } catch (error) {
@@ -275,7 +306,8 @@ export function InventoryAppProvider({ children }) {
     }
 
     try {
-      applyState(await inventoryApi.deleteDsr(dsr.id));
+      await inventoryApi.deleteDsr(dsr.id);
+      removeFromDsrDirectory(dsr.id);
       pushToast('success', t('common.delete'), `${dsr.name} ${t('alerts.deleted')}`);
       return { ok: true };
     } catch (error) {
@@ -287,7 +319,8 @@ export function InventoryAppProvider({ children }) {
 
   async function saveIssue(issue) {
     try {
-      applyState(await inventoryApi.saveIssue(issue));
+      await inventoryApi.saveIssue(issue);
+      await refreshProductDirectory();
       pushToast('success', t('nav.morningIssue'), `${issue.dsrName} - ${formatDate(issue.date)}`);
       return { ok: true };
     } catch (error) {
@@ -299,7 +332,8 @@ export function InventoryAppProvider({ children }) {
 
   async function saveSettlement(settlement) {
     try {
-      applyState(await inventoryApi.saveSettlement(settlement));
+      await inventoryApi.saveSettlement(settlement);
+      await refreshProductDirectory();
       pushToast('success', t('nav.eveningSettlement'), `${settlement.dsrName} - ${formatCurrency(settlement.totalPayable)}`);
       return { ok: true };
     } catch (error) {
@@ -344,10 +378,8 @@ export function InventoryAppProvider({ children }) {
       can: (permission) => hasPermission(user?.role, permission),
       user,
       authLoading,
-      products,
-      dsrs,
-      issues,
-      settlements,
+      productDirectory,
+      dsrDirectory,
       loading,
       loadError,
       toasts,
@@ -365,7 +397,7 @@ export function InventoryAppProvider({ children }) {
       saveIssue,
       saveSettlement,
     }),
-    [today, language, t, user, authLoading, products, dsrs, issues, settlements, loading, loadError, toasts, confirmation],
+    [today, language, t, user, authLoading, productDirectory, dsrDirectory, loading, loadError, toasts, confirmation],
   );
 
   return <InventoryAppContext.Provider value={value}>{children}</InventoryAppContext.Provider>;

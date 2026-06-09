@@ -3,10 +3,26 @@ export class ProductController {
     this.inventoryService = inventoryService;
   }
 
+  list = async (req, res, next) => {
+    try {
+      res.json(await this.inventoryService.listProducts(req.query));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  directory = async (req, res, next) => {
+    try {
+      res.json(await this.inventoryService.getProductsDirectory());
+    } catch (error) {
+      next(error);
+    }
+  };
+
   create = async (req, res, next) => {
     try {
-      const state = await this.inventoryService.saveProduct(req.body, req.currentUser);
-      res.status(201).json(state);
+      const product = await this.inventoryService.saveProduct(req.body, req.currentUser);
+      res.status(201).json({ product });
     } catch (error) {
       next(error);
     }
@@ -14,8 +30,8 @@ export class ProductController {
 
   update = async (req, res, next) => {
     try {
-      const state = await this.inventoryService.saveProduct({ ...req.body, id: req.params.id }, req.currentUser);
-      res.json(state);
+      const product = await this.inventoryService.saveProduct({ ...req.body, id: req.params.id }, req.currentUser);
+      res.json({ product });
     } catch (error) {
       next(error);
     }
@@ -31,7 +47,8 @@ export class ProductController {
 
   addStock = async (req, res, next) => {
     try {
-      res.json(await this.inventoryService.addStock(req.params.id, req.body.addPieces, req.currentUser));
+      const product = await this.inventoryService.addStock(req.params.id, req.body.addPieces, req.currentUser);
+      res.json({ product });
     } catch (error) {
       next(error);
     }

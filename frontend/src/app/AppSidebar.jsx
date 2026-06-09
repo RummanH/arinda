@@ -22,11 +22,11 @@ export default function AppSidebar({ mobileOpen, setMobileOpen, user, language, 
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-blue-500/10 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-[var(--secondary-soft)] to-transparent" />
         <div className="pointer-events-none absolute -right-10 top-20 h-40 w-40 rounded-full bg-sky-400/10 blur-3xl" />
         <div className="relative flex items-center justify-between px-2">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#1d4ed8,#0f172a)] text-white shadow-[0_16px_32px_rgba(37,99,235,0.22)]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,var(--secondary-strong),var(--bg-dark))] text-white shadow-[0_16px_32px_var(--secondary-shadow)]">
               <Warehouse size={22} />
             </div>
             <div>
@@ -59,7 +59,7 @@ export default function AppSidebar({ mobileOpen, setMobileOpen, user, language, 
                           cx(
                             'group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold transition',
                             isActive
-                              ? 'border border-blue-100 bg-[linear-gradient(135deg,rgba(239,246,255,0.98),rgba(255,255,255,0.98))] text-slate-950 shadow-[0_14px_30px_rgba(37,99,235,0.12)]'
+                              ? 'border border-[var(--secondary-soft)] bg-[linear-gradient(135deg,rgba(239,246,255,0.98),rgba(255,255,255,0.98))] text-slate-950 shadow-[0_8px_20px_var(--secondary-shadow)]'
                               : 'border border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950',
                           )
                         }
@@ -69,13 +69,13 @@ export default function AppSidebar({ mobileOpen, setMobileOpen, user, language, 
                             <span
                               className={cx(
                                 'flex h-9 w-9 items-center justify-center rounded-2xl transition',
-                                isActive ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 group-hover:bg-blue-50 group-hover:text-blue-700',
+                                isActive ? 'bg-[var(--secondary)] text-white' : 'bg-slate-100 text-slate-600 group-hover:bg-[var(--secondary-soft)] group-hover:text-[var(--secondary-strong)]',
                               )}
                             >
                               <Icon size={18} />
                             </span>
                             <span className="flex-1">{t(route.labelKey)}</span>
-                            {isActive ? <span className="h-2.5 w-2.5 rounded-full bg-blue-500 shadow-[0_0_0_6px_rgba(37,99,235,0.12)]" /> : null}
+                            {isActive ? <span className="h-2.5 w-2.5 rounded-full bg-[var(--secondary)] shadow-[0_0_0_4px_var(--secondary-soft)]" /> : null}
                           </>
                         )}
                       </NavLink>
@@ -90,7 +90,7 @@ export default function AppSidebar({ mobileOpen, setMobileOpen, user, language, 
         <div className="relative mt-4 rounded-[28px] border border-slate-200 bg-white/95 p-4 shadow-[0_16px_35px_rgba(15,23,42,0.08)] sm:p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
-              <UserCircle size={18} className="shrink-0 text-blue-600" />
+              <UserCircle size={18} className="shrink-0 text-[var(--secondary)]" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-black text-slate-950">{user?.name}</p>
                 <p className="truncate text-xs font-bold text-slate-500">{user?.role}</p>
